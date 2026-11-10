@@ -109,19 +109,28 @@ public sealed partial class MainViewModel : ObservableObject
 
         if (string.IsNullOrWhiteSpace(text))
         {
-            _pluginManager.CancelCurrent();
-            ApplyResults([]);
+            ShowHome(generation);
             return;
         }
 
         _ = RunQueryAsync(text, generation);
     }
 
-    private void ClearResults()
+    private void ClearResults() => ShowHome(Interlocked.Increment(ref _generation));
+
+    // Kutu boş: boş sorguyu destekleyen eklenti (Programs) varsa onun listesi gösterilir, yoksa liste temizlenir.
+    // Eski liste, yeni liste gelene kadar tutulur (titreme yok).
+    private void ShowHome(int generation)
     {
-        Interlocked.Increment(ref _generation);
         _pluginManager.CancelCurrent();
-        ApplyResults([]);
+        if (_pluginManager.HasEmptyQueryPlugins)
+        {
+            _ = RunQueryAsync(string.Empty, generation);
+        }
+        else
+        {
+            ApplyResults([]);
+        }
     }
 
     private async Task RunQueryAsync(string text, int generation)

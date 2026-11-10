@@ -1,3 +1,4 @@
+using System.Windows.Media;
 using Launchly.Plugin;
 
 namespace Launchly.App.ViewModels;
@@ -18,10 +19,14 @@ public sealed class ResultItemViewModel
         Initial = string.IsNullOrEmpty(result.Icon) && result.Title.Length > 0
             ? char.ToUpperInvariant(result.Title[0]).ToString()
             : string.Empty;
-        IconColor = Palette[(result.Title.Length == 0 ? 0 : result.Title.Sum(c => c)) % Palette.Length];
+        Image = result.IconImage as ImageSource;
+        IconColor = Image is not null ? "Transparent" : Palette[(result.Title.Length == 0 ? 0 : result.Title.Sum(c => c)) % Palette.Length];
     }
 
     public Result Result { get; }
+
+    /// <summary>Gerçek ikon görseli (dondurulmuş); yoksa null ve harf/simge karosu gösterilir.</summary>
+    public ImageSource? Image { get; }
 
     public string Title => Result.Title;
 

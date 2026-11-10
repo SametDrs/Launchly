@@ -3,7 +3,13 @@
   <PropertyGroup>
     <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
     <RootNamespace>Launchly.Plugins</RootNamespace>
+    <UseWPF>true</UseWPF>
   </PropertyGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Launchly.Tests" />
+    <Using Include="System.IO" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Launchly.Plugin\Launchly.Plugin.csproj" />

@@ -64,6 +64,18 @@ public sealed class PluginManager : IDisposable
         }
     }
 
+    /// <summary>Kutu boşken çalışacak etkin bir eklenti var mı (ana ekran listesi).</summary>
+    public bool HasEmptyQueryPlugins
+    {
+        get
+        {
+            lock (_gate)
+            {
+                return _global.Any(p => p.Metadata.HandlesEmptyQuery && IsEnabled(p));
+            }
+        }
+    }
+
     /// <summary>Metni etkin anahtar kelimelere göre <see cref="Query"/>'ye çevirir.</summary>
     public Query BuildQuery(string? raw) => QueryBuilder.Build(raw, ActionKeywords);
 
@@ -98,7 +110,13 @@ public sealed class PluginManager : IDisposable
             var query = BuildQuery(raw);
             var plugins = SelectPlugins(query);
 
-            if (string.IsNullOrWhiteSpace(query.Raw) || plugins.Count == 0)
+            if (string.IsNullOrWhiteSpace(query.Raw))
+            {
+                // Kutu boş: yalnızca açıkça isteyen eklentiler çalışır (ör. uygulama listesi).
+                plugins = plugins.Where(p => p.Metadata.HandlesEmptyQuery).ToList();
+            }
+
+            if (plugins.Count == 0)
             {
                 PublishIfCurrent(cts, publish, []);
                 return;

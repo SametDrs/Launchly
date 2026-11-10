@@ -10,6 +10,9 @@ public sealed class Result
     /// <summary>Segoe Fluent Icons karakteri (1-2 karakter). Boşsa arayüz başlığın ilk harfini gösterir.</summary>
     public string Icon { get; init; } = string.Empty;
 
+    /// <summary>Gerçek ikon görseli (Windows'ta dondurulmuş <c>System.Windows.Media.ImageSource</c>); doluysa <see cref="Icon"/> yerine gösterilir. SDK WPF'ye bağlı olmasın diye <c>object</c>.</summary>
+    public object? IconImage { get; init; }
+
     /// <summary>Sıralama puanı; yüksek olan üstte.</summary>
     public int Score { get; init; }
 

@@ -9,6 +9,8 @@ using Launchly.App.ViewModels;
 using Launchly.Core;
 using Launchly.Core.Plugins;
 using Launchly.Core.Storage;
+using Launchly.Plugin;
+using Launchly.Plugins.Programs;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -102,7 +104,8 @@ public partial class App : Application
             DataLocation.SettingsPath,
             sp.GetRequiredService<ILogger<JsonStorage<Settings>>>()));
         services.AddSingleton(sp => sp.GetRequiredService<JsonStorage<Settings>>().Load());
-        // Dahili eklentiler (IPlugin) 04-06 görevlerinde buraya AddSingleton<IPlugin, ...>() ile eklenir.
+        // Dahili eklentiler (IPlugin); 05-06 görevleri buraya AddSingleton<IPlugin, ...>() ile ekler.
+        services.AddSingleton<IPlugin, ProgramsPlugin>();
         services.AddSingleton<PluginManager>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
