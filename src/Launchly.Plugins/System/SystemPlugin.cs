@@ -37,17 +37,30 @@ public sealed class WindowsSystemCommands : ISystemCommands
         }
     }
 
-    public void Sleep() => NativeMethods.SetSuspendState(false, false, false);
+    public void Sleep()
+    {
+        if (!NativeMethods.SetSuspendState(false, false, false))
+        {
+            throw new InvalidOperationException("Uyku moduna geçilemedi (Win32 hata " + Marshal.GetLastWin32Error() + ").");
+        }
+    }
 
     public void Shutdown() => RunShutdown("/s /t 0");
 
     public void Restart() => RunShutdown("/r /t 0");
 
-    // NOCONFIRMATION | NOPROGRESSUI | NOSOUND; boş çöp kutusunda dönen hata kodu zararsızdır.
-    public void EmptyRecycleBin() => NativeMethods.SHEmptyRecycleBin(IntPtr.Zero, null, 0x7);
+    // NOCONFIRMATION | NOPROGRESSUI | NOSOUND. S_OK, S_FALSE ve E_UNEXPECTED (çöp kutusu zaten boş) başarı sayılır.
+    public void EmptyRecycleBin()
+    {
+        var hr = NativeMethods.SHEmptyRecycleBin(IntPtr.Zero, null, 0x7);
+        if (hr is not (0 or 1 or unchecked((int)0x8000FFFF)))
+        {
+            throw new InvalidOperationException("Geri dönüşüm kutusu boşaltılamadı (HRESULT 0x" + hr.ToString("X8") + ").");
+        }
+    }
 
     private static void RunShutdown(string args) =>
-        Process.Start(new ProcessStartInfo("shutdown.exe", args) { CreateNoWindow = true, UseShellExecute = false });
+        Process.Start(new ProcessStartInfo("shutdown.exe", args) { CreateNoWindow = true, UseShellExecute = false })?.Dispose();
 
     private static class NativeMethods
     {
@@ -85,7 +98,7 @@ public sealed class SystemPlugin : IPlugin
         new("Sleep", "Put the computer to sleep", "", null, c => c.Sleep()),
         new("Shutdown", "Shut down the computer", "", "Bilgisayar kapatılsın mı?", c => c.Shutdown()),
         new("Restart", "Restart the computer", "", "Bilgisayar yeniden başlatılsın mı?", c => c.Restart()),
-        new("Empty Recycle Bin", "Permanently delete items in the Recycle Bin", "", null, c => c.EmptyRecycleBin()),
+        new("Empty Recycle Bin", "Permanently delete items in the Recycle Bin", "", "Geri dönüşüm kutusu kalıcı olarak boşaltılsın mı?", c => c.EmptyRecycleBin()),
     ];
 
     private readonly ISystemCommands _system;

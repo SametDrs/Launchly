@@ -42,8 +42,8 @@ public static class HotkeyParser
             }
         }
 
-        // Düzenleyicisiz tek tuş (ör. "A") global kısayol olarak kabul edilmez.
-        if (key == 0 || modifiers == 0)
+        // Düzenleyicisiz tek tuş (ör. "A") ya da yalnızca Shift (ör. "Shift+A", yazı yazmayı bozar) kabul edilmez.
+        if (key == 0 || !HasStrongModifier(modifiers))
         {
             return false;
         }
@@ -57,7 +57,7 @@ public static class HotkeyParser
     {
         text = string.Empty;
         var name = KeyName(virtualKey);
-        if (name is null || modifiers == 0)
+        if (name is null || !HasStrongModifier(modifiers))
         {
             return false;
         }
@@ -71,6 +71,9 @@ public static class HotkeyParser
         text = string.Join('+', parts);
         return true;
     }
+
+    /// <summary>Ctrl, Alt ya da Win'den en az biri gerekir; tek başına Shift yeterli değildir.</summary>
+    private static bool HasStrongModifier(uint modifiers) => (modifiers & (ModAlt | ModControl | ModWin)) != 0;
 
     private static string? KeyName(uint vk)
     {

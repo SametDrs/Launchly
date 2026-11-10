@@ -20,6 +20,15 @@ public sealed class SearchSource
 
     public bool Enabled { get; set; } = true;
 
+    /// <summary>JSON'dan gelen null metinleri boşa çevirir.</summary>
+    internal void Normalize()
+    {
+        Title ??= string.Empty;
+        ActionKeyword ??= string.Empty;
+        UrlTemplate ??= string.Empty;
+        Icon ??= string.Empty;
+    }
+
     public SearchSource Clone() => (SearchSource)MemberwiseClone();
 
     /// <summary>Kaynağı doğrular: başlık, tek kelimelik anahtar kelime ve http(s) + <c>{q}</c> içeren şablon.</summary>

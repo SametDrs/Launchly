@@ -196,6 +196,60 @@ public class MainViewModelTests
     }
 
     [Fact]
+    public async Task ExecuteSelected_WhileQueryPending_WaitsForNewResults_NotStaleList()
+    {
+        var ran = new List<string>();
+        var plugin = new FakePlugin("p", ["*"], async (q, _) =>
+        {
+            await Task.Delay(q.Search == "slow" ? 150 : 0);
+            var title = "res-" + q.Search;
+            return [R(title, 1, () => { ran.Add(title); return Task.FromResult(true); })];
+        });
+        var (vm, manager) = await CreateAsync(plugin);
+        using var m = manager;
+        vm.QueryText = "fast";
+        await WaitUntilAsync(() => Titles(vm).SequenceEqual(["res-fast"]), "ilk sonuç");
+
+        vm.QueryText = "slow";              // sonuçlar henüz gelmedi; eski liste hâlâ "res-fast"
+        Assert.Equal(["res-fast"], Titles(vm));
+        var hide = await vm.ExecuteSelectedAsync();
+
+        Assert.True(hide);
+        Assert.Equal(["res-slow"], ran);
+    }
+
+    [Fact]
+    public async Task ExecuteSelected_WhilePendingQueryYieldsNothing_DoesNotRunStaleItem()
+    {
+        var ran = 0;
+        var plugin = new FakePlugin("p", ["*"], async (q, _) =>
+        {
+            await Task.Delay(q.Search == "none" ? 100 : 0);
+            return q.Search == "none" ? Array.Empty<Launchly.Plugin.Result>() : new[] { R("old", 1, () => { ran++; return Task.FromResult(true); }) };
+        });
+        var (vm, manager) = await CreateAsync(plugin);
+        using var m = manager;
+        vm.QueryText = "x";
+        await WaitUntilAsync(() => vm.Results.Count == 1, "ilk sonuç");
+
+        vm.QueryText = "none";
+        Assert.False(await vm.ExecuteSelectedAsync());
+
+        Assert.Equal(0, ran);
+    }
+
+    [Fact]
+    public void ResultItem_WithIconImage_HasNoInitial()
+    {
+        var withImage = new ResultItemViewModel(new Launchly.Plugin.Result { Title = "Notepad", IconImage = new System.Windows.Media.DrawingImage() });
+        var without = new ResultItemViewModel(new Launchly.Plugin.Result { Title = "Notepad" });
+
+        Assert.NotNull(withImage.Image);
+        Assert.Equal(string.Empty, withImage.Initial);
+        Assert.Equal("N", without.Initial);
+    }
+
+    [Fact]
     public async Task SubTitleAndIcon_AreExposedForTheRow()
     {
         var plugin = new FakePlugin("p", ["*"], (_, _) => Results(

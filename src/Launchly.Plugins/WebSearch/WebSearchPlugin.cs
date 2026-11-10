@@ -118,5 +118,5 @@ public sealed class WebSearchPlugin : IPlugin
 
     private IEnumerable<SearchSource> ActiveSources() =>
         (_settings.SearchSources ?? [])
-            .Where(s => s.Enabled && !string.IsNullOrWhiteSpace(s.ActionKeyword) && !string.IsNullOrWhiteSpace(s.UrlTemplate));
+            .Where(s => s is not null && s.Enabled && !string.IsNullOrWhiteSpace(s.ActionKeyword) && !string.IsNullOrWhiteSpace(s.UrlTemplate));
 }

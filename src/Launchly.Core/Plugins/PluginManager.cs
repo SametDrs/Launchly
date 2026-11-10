@@ -283,7 +283,7 @@ public sealed class PluginManager : IDisposable
     }
 
     private bool IsEnabled(IPlugin plugin) =>
-        !_settings.DisabledPlugins.Contains(plugin.Metadata.Id, StringComparer.Ordinal);
+        _settings.DisabledPlugins?.Contains(plugin.Metadata.Id, StringComparer.Ordinal) != true;
 
     private void CancelLocked()
     {

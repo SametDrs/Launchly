@@ -27,13 +27,34 @@ public class QueryBuilderTests
     }
 
     [Fact]
-    public void KeywordAlone_HasEmptySearch()
+    public void KeywordFollowedBySpace_HasEmptySearch()
     {
-        var q = QueryBuilder.Build("calc", Keywords);
+        var q = QueryBuilder.Build("calc ", Keywords);
 
         Assert.Equal("calc", q.ActionKeyword);
         Assert.Equal(string.Empty, q.Search);
         Assert.Empty(q.Terms);
+    }
+
+    [Theory]
+    [InlineData("g")]
+    [InlineData("calc")]
+    [InlineData("  yt")]
+    public void KeywordAloneWithoutSpace_IsAGlobalQuery(string raw)
+    {
+        var q = QueryBuilder.Build(raw, Keywords);
+
+        Assert.Equal(string.Empty, q.ActionKeyword);
+        Assert.Equal(raw.Trim(), q.Search);
+    }
+
+    [Fact]
+    public void KeywordWithSpaceThenText_IsFilesStyleQuery()
+    {
+        var q = QueryBuilder.Build("g rapor", Keywords);
+
+        Assert.Equal("g", q.ActionKeyword);
+        Assert.Equal("rapor", q.Search);
     }
 
     [Fact]

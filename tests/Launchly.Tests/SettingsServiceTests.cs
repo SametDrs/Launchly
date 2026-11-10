@@ -21,6 +21,8 @@ public sealed class SettingsServiceTests : IDisposable
 
         public string? Current { get; private set; } = "Alt+Space";
 
+        public bool IsRegistered => Current is not null;
+
         public bool TryRegister(string hotkey, out string? error)
         {
             Calls.Add(hotkey);
@@ -216,6 +218,34 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void Apply_UnchangedHotkey_RetriesWhenCurrentRegistrationFailed()
+    {
+        _hotkey.Taken.Add("Alt+Space");
+        _hotkey.TryRegister("Alt+Space", out _);   // başlangıçta çakışma: kayıt yok
+        _hotkey.Calls.Clear();
+        Assert.False(_hotkey.IsRegistered);
+        _hotkey.Taken.Clear();                     // çakışan uygulama kapandı
+
+        var result = _service.Apply(_service.CreateDraft());
+
+        Assert.True(result.Success, result.Error);
+        Assert.Equal(["Alt+Space"], _hotkey.Calls);
+        Assert.True(_hotkey.IsRegistered);
+    }
+
+    [Fact]
+    public void Apply_UnchangedHotkey_StillFailing_ReportsError()
+    {
+        _hotkey.Taken.Add("Alt+Space");
+        _hotkey.TryRegister("Alt+Space", out _);
+
+        var result = _service.Apply(_service.CreateDraft());
+
+        Assert.False(result.Success);
+        Assert.Contains("kullanımda", result.Error);
+    }
+
+    [Fact]
     public void Apply_AutoStart_WritesOnlyOnChange()
     {
         var draft = _service.CreateDraft();
@@ -279,6 +309,41 @@ public sealed class SettingsServiceTests : IDisposable
         vm.Revert();
         Assert.False(vm.IsError);
         Assert.Equal(_live.SearchSources.Count, vm.Sources.Count);
+    }
+
+    [Theory]
+    [InlineData("{\"DisabledPlugins\":null}")]
+    [InlineData("{\"SearchSources\":[null]}")]
+    [InlineData("{\"SearchSources\":null,\"DisabledPlugins\":[null,\"x\"]}")]
+    public void Load_NullListsAndItems_AreNormalized_AndPluginsKeepWorking(string json)
+    {
+        File.WriteAllText(_storage.FilePath, json);
+
+        var settings = _storage.Load().Normalize();
+
+        Assert.NotNull(settings.DisabledPlugins);
+        Assert.DoesNotContain(null!, settings.DisabledPlugins);
+        Assert.NotNull(settings.SearchSources);
+        Assert.DoesNotContain(null!, settings.SearchSources);
+
+        var web = new WebSearchPlugin(settings, new NoopOpener(), NullLogger.Instance);
+        using var manager = new PluginManager([web], settings, NullLogger<PluginManager>.Instance, Path.Combine(_dir, "p2"));
+        _ = manager.ActionKeywords;
+        _ = web.Metadata.ActionKeywords;
+        var service = new SettingsService(settings, _storage, _hotkey, _auto, manager);
+        Assert.NotNull(service.CreateDraft().SearchSources);
+    }
+
+    [Fact]
+    public void NullGuards_WorkEvenWithoutNormalize()
+    {
+        var settings = new Settings { DisabledPlugins = null!, SearchSources = [null!, new SearchSource { Title = "A", ActionKeyword = "a", UrlTemplate = "https://a/{q}" }] };
+        var web = new WebSearchPlugin(settings, new NoopOpener(), NullLogger.Instance);
+        using var manager = new PluginManager([web], settings, NullLogger<PluginManager>.Instance, Path.Combine(_dir, "p3"));
+
+        Assert.Contains("a", manager.ActionKeywords);
+        var service = new SettingsService(settings, _storage, _hotkey, _auto, manager);
+        Assert.Single(service.CreateDraft().SearchSources);
     }
 
     [Fact]

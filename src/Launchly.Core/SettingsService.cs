@@ -10,6 +10,9 @@ public interface IHotkeyRegistrar
 {
     /// <summary>Önceki kaydı bırakıp yenisini kaydeder. Başarısızsa kullanıcıya gösterilecek açıklama <paramref name="error"/> içindedir.</summary>
     bool TryRegister(string hotkey, out string? error);
+
+    /// <summary>Şu an bir kısayol kayıtlı mı (başlangıçta çakışma olduysa false).</summary>
+    bool IsRegistered { get; }
 }
 
 /// <summary>Windows açılışında başlatma kaydı (App'te <c>HKCU\...\Run</c>, testte sahte).</summary>
@@ -62,8 +65,8 @@ public sealed class SettingsService
         Hotkey = _live.Hotkey,
         Backdrop = _live.Backdrop,
         MaxResults = _live.MaxResults,
-        DisabledPlugins = [.. _live.DisabledPlugins],
-        SearchSources = _live.SearchSources.Select(s => s.Clone()).ToList(),
+        DisabledPlugins = [.. _live.DisabledPlugins ?? []],
+        SearchSources = (_live.SearchSources ?? []).Where(s => s is not null).Select(s => s.Clone()).ToList(),
         HideOnFocusLost = _live.HideOnFocusLost,
         StartOnSystemStartup = _live.StartOnSystemStartup,
         Language = _live.Language,
@@ -107,10 +110,16 @@ public sealed class SettingsService
         var oldHotkey = _live.Hotkey;
         var hotkeyChanged = !string.Equals(draft.Hotkey, oldHotkey, StringComparison.OrdinalIgnoreCase);
 
-        if (hotkeyChanged && !_hotkey.TryRegister(draft.Hotkey, out var hotkeyError))
+        // Metin değişmese de mevcut kayıt başarısızsa (ör. başlangıçta çakışma) yeniden denenir.
+        var needsRegister = hotkeyChanged || !_hotkey.IsRegistered;
+        if (needsRegister && !_hotkey.TryRegister(draft.Hotkey, out var hotkeyError))
         {
             // Eski kayıt kaydedici tarafından bırakılmış olabilir: eskisini geri yükle.
-            RestoreHotkey(oldHotkey);
+            if (hotkeyChanged)
+            {
+                RestoreHotkey(oldHotkey);
+            }
+
             return new SettingsApplyResult(false, hotkeyError ?? "Kısayol kaydedilemedi.");
         }
 

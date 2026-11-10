@@ -67,13 +67,22 @@ public partial class SettingsWindow : Window
 
     private void OnHotkeyKeyDown(object sender, KeyEventArgs e)
     {
-        e.Handled = true;
         var key = e.Key switch
         {
             Key.System => e.SystemKey,
             Key.ImeProcessed => e.ImeProcessedKey,
             _ => e.Key,
         };
+
+        // Odak gezintisi (Tab / Shift+Tab) ve pencere kapatma (Alt+F4) yutulmaz.
+        var current = Keyboard.Modifiers;
+        if ((key == Key.Tab && (current & ~ModifierKeys.Shift) == ModifierKeys.None) ||
+            (key == Key.F4 && current.HasFlag(ModifierKeys.Alt)))
+        {
+            return;
+        }
+
+        e.Handled = true;
 
         if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift
             or Key.LWin or Key.RWin or Key.None)

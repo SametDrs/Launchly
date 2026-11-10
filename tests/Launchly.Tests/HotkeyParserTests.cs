@@ -36,7 +36,21 @@ public class HotkeyParserTests
     [InlineData("Alt+")]
     [InlineData("Alt+Foo")]
     [InlineData("Alt+A+B")]
+    [InlineData("Shift+A")]
+    [InlineData("Shift+Space")]
     public void Invalid_ReturnsFalse(string? text) => Assert.False(HotkeyParser.TryParse(text, out _));
+}
+
+public class HotkeyStrongModifierTests
+{
+    [Fact]
+    public void TryFormat_RejectsShiftOnlyAndNoModifier()
+    {
+        Assert.False(HotkeyParser.TryFormat(HotkeyParser.ModShift, 0x41, out _));
+        Assert.False(HotkeyParser.TryFormat(0, 0x41, out _));
+        Assert.True(HotkeyParser.TryFormat(HotkeyParser.ModShift | HotkeyParser.ModWin, 0x41, out var text));
+        Assert.Equal("Shift+Win+A", text);
+    }
 }
 
 public class SettingsBackdropTests

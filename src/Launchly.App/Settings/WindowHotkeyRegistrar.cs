@@ -7,4 +7,6 @@ namespace Launchly.App.SettingsUi;
 public sealed class WindowHotkeyRegistrar(HotkeyManager manager, IntPtr hwnd) : IHotkeyRegistrar
 {
     public bool TryRegister(string hotkey, out string? error) => manager.TryRegister(hwnd, hotkey, out error);
+
+    public bool IsRegistered => manager.IsRegistered;
 }

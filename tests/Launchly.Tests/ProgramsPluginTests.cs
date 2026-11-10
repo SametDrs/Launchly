@@ -106,6 +106,65 @@ public sealed class ProgramsPluginTests : IDisposable
     }
 
     [Fact]
+    public void Scanner_ResolverIoFailure_SkipsThatEntryOnly()
+    {
+        var root = Path.Combine(_dir, "io");
+        MakeLnk(root, "Good");
+        MakeLnk(Path.Combine(root, "Sub"), "Broken");
+        MakeLnk(Path.Combine(root, "Sub"), "AlsoGood");
+
+        var scanner = new ProgramScanner([root], lnk =>
+            Path.GetFileNameWithoutExtension(lnk) == "Broken"
+                ? throw new IOException("okunamadı")
+                : @"C:\Apps\" + Path.GetFileNameWithoutExtension(lnk) + ".exe");
+
+        Assert.Equal(["AlsoGood", "Good"], scanner.Scan().Select(e => e.Name));
+    }
+
+    [Fact]
+    public async Task Query_LimitsResultsToMaxResults()
+    {
+        var root = Path.Combine(_dir, "start");
+        foreach (var n in new[] { "App1", "App2", "App3", "App4" })
+        {
+            MakeLnk(root, n);
+        }
+
+        var plugin = new ProgramsPlugin(NullLogger.Instance, CachePath, new ProgramScanner([root], Resolver()), _ => { }, new Settings { MaxResults = 2 });
+        await plugin.InitAsync(new PluginContext(_dir));
+        await plugin.RefreshTask;
+
+        Assert.Equal(2, (await Query(plugin, "app")).Count);
+    }
+
+    [Fact]
+    public async Task Dispose_CancelsBackgroundScan_AndDoesNotWriteCache()
+    {
+        var root = Path.Combine(_dir, "start");
+        MakeLnk(root, "Alpha");
+        MakeLnk(root, "Beta");
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var plugin = CreatePlugin(new ProgramScanner([root], lnk =>
+        {
+            entered.Set();
+            release.Wait(TimeSpan.FromSeconds(10));
+            return Resolver()(lnk);
+        }));
+        await plugin.InitAsync(new PluginContext(_dir));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+
+        var disposing = Task.Run(plugin.Dispose);
+        await Task.Delay(100);
+        release.Set();
+        await disposing;
+        await plugin.RefreshTask;
+
+        Assert.Empty(new Launchly.Core.Storage.JsonStorage<ProgramCache>(CachePath).Load().Programs);   // yarım tarama yazılmadı
+        Assert.Equal(0, plugin.Count);
+    }
+
+    [Fact]
     public void Scanner_MissingRoot_IsIgnored()
     {
         var list = new ProgramScanner([Path.Combine(_dir, "yok")], Resolver()).Scan();

@@ -15,7 +15,7 @@ public interface IFileOpener
 public sealed class ShellFileOpener : IFileOpener
 {
     public void Open(string path) =>
-        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose();
 }
 
 /// <summary>
@@ -123,7 +123,8 @@ public sealed class FilesPlugin : IPlugin
         var subdirs = new List<string>();
         try
         {
-            foreach (var entry in Directory.EnumerateFileSystemEntries(dir))
+            // Öznitelikler numaralandırma sırasında gelir; öğe başına ek dosya sistemi çağrısı yapılmaz.
+            foreach (var info in new DirectoryInfo(dir).EnumerateFileSystemInfos())
             {
                 ct.ThrowIfCancellationRequested();
                 if (++scanned >= MaxScanned)
@@ -131,23 +132,15 @@ public sealed class FilesPlugin : IPlugin
                     break;
                 }
 
-                FileAttributes attrs;
-                try
-                {
-                    attrs = File.GetAttributes(entry);
-                }
-                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
-                {
-                    continue;
-                }
-
+                var entry = info.FullName;
+                var attrs = info.Attributes;
                 if ((attrs & (FileAttributes.Hidden | FileAttributes.System)) != 0)
                 {
                     continue;
                 }
 
                 var isDir = (attrs & FileAttributes.Directory) != 0;
-                var match = StringMatcher.Match(search, Path.GetFileName(entry));
+                var match = StringMatcher.Match(search, info.Name);
                 if (match.IsMatch)
                 {
                     hits.Add((entry, isDir, match.Score));

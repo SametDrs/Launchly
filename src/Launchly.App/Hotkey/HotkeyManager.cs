@@ -24,6 +24,9 @@ public sealed class HotkeyManager : IDisposable
 
     public event Action? Pressed;
 
+    /// <summary>Kısayol şu an başarıyla kayıtlı mı.</summary>
+    public bool IsRegistered => _registered;
+
     /// <summary>Kısayolu kaydeder. Başarısızsa kullanıcıya gösterilecek açıklama <paramref name="error"/> içindedir.</summary>
     public bool TryRegister(IntPtr hwnd, string hotkeyText, out string? error)
     {

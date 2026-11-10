@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Threading;
 
 namespace Launchly.App;
@@ -8,6 +9,12 @@ namespace Launchly.App;
 /// </summary>
 public sealed class SingleInstance : IDisposable
 {
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool AllowSetForegroundWindow(int processId);
+
+    private const int AsfwAny = -1;
+
     private readonly Mutex _mutex;
     private readonly EventWaitHandle _signal;
     private readonly CancellationTokenSource _stop = new();
@@ -42,7 +49,12 @@ public sealed class SingleInstance : IDisposable
     }
 
     /// <summary>Çalışan ilk örneği uyarır.</summary>
-    public void SignalFirst() => _signal.Set();
+    public void SignalFirst()
+    {
+        // Ön plan hakkı bu (kullanıcının az önce başlattığı) süreçte; ilk örnek pencereyi gerçekten öne alabilsin diye devret.
+        AllowSetForegroundWindow(AsfwAny);
+        _signal.Set();
+    }
 
     public void Dispose()
     {

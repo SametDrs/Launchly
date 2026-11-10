@@ -177,7 +177,6 @@ public sealed class HelperPluginsTests : IDisposable
     [Theory]
     [InlineData("lock", "Lock", "lock")]
     [InlineData("sleep", "Sleep", "sleep")]
-    [InlineData("recycle", "Empty Recycle Bin", "bin")]
     public async Task System_SafeCommands_RunWithoutConfirmation(string search, string title, string call)
     {
         var sys = new FakeSystem();
@@ -194,6 +193,7 @@ public sealed class HelperPluginsTests : IDisposable
     [Theory]
     [InlineData("shutdown", "shutdown")]
     [InlineData("restart", "restart")]
+    [InlineData("recycle", "bin")]
     public async Task System_IrreversibleCommands_NeedConfirmation(string search, string call)
     {
         var sys = new FakeSystem();

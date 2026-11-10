@@ -18,6 +18,6 @@ public sealed class ShellUrlOpener : IUrlOpener
             throw new InvalidOperationException("Yalnızca http/https adresleri açılabilir.");
         }
 
-        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose();
     }
 }

@@ -32,4 +32,28 @@ public sealed class Settings
 
     /// <summary>Arayüz dili.</summary>
     public string Language { get; set; } = "tr";
+
+    /// <summary>
+    /// Elle düzenlenmiş/bozuk JSON'dan gelen null değerleri düzeltir: null liste boş (kaynaklarda varsayılan) olur,
+    /// listelerdeki null öğeler atılır, null metinler varsayılana/boşa döner. Yüklemeden hemen sonra çağrılır.
+    /// </summary>
+    public Settings Normalize()
+    {
+        DisabledPlugins = (DisabledPlugins ?? []).Where(id => id is not null).ToList();
+        SearchSources = SearchSources is null
+            ? SearchSource.CreateDefaults()
+            : SearchSources.Where(s => s is not null).ToList();
+        foreach (var source in SearchSources)
+        {
+            source.Normalize();
+        }
+
+        if (string.IsNullOrWhiteSpace(Hotkey))
+        {
+            Hotkey = "Alt+Space";
+        }
+
+        Language ??= "tr";
+        return this;
+    }
 }

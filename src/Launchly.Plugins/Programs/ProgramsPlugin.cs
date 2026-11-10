@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Launchly.Plugins.Programs;
 
 /// <summary>Start Menu uygulamalarını bulur, ikonlarıyla listeler ve açar.</summary>
-public sealed class ProgramsPlugin : IPlugin
+public sealed class ProgramsPlugin : IPlugin, IDisposable
 {
     public const string PluginId = "launchly.programs";
     private const int MaxReturned = 50;
@@ -17,22 +17,26 @@ public sealed class ProgramsPlugin : IPlugin
     private readonly ILogger _logger;
     private readonly JsonStorage<ProgramCache> _cacheStorage;
     private readonly ProgramScanner _scanner;
+    private readonly Settings? _settings;
+    private readonly CancellationTokenSource _shutdown = new();
     private readonly IconLoader _icons = new();
     private readonly Action<string> _launch;
     private volatile ProgramEntry[] _entries = [];
 
     /// <summary>DI için: gerçek Start Menu klasörleri ve <c>%AppData%\Launchly\cache\programs.json</c>.</summary>
-    public ProgramsPlugin(ILogger<ProgramsPlugin> logger)
+    public ProgramsPlugin(ILogger<ProgramsPlugin> logger, Settings settings)
         : this(
             logger,
             Path.Combine(DataLocation.RoamingDirectory, "cache", "programs.json"),
-            new ProgramScanner(ProgramScanner.DefaultRoots()),
-            LaunchShortcut)
+            new ProgramScanner(ProgramScanner.DefaultRoots(), logger: logger),
+            LaunchShortcut,
+            settings)
     {
     }
 
-    internal ProgramsPlugin(ILogger logger, string cachePath, ProgramScanner scanner, Action<string> launch)
+    internal ProgramsPlugin(ILogger logger, string cachePath, ProgramScanner scanner, Action<string> launch, Settings? settings = null)
     {
+        _settings = settings;
         _logger = logger ?? NullLogger.Instance;
         _cacheStorage = new JsonStorage<ProgramCache>(cachePath, _logger);
         _scanner = scanner;
@@ -64,8 +68,25 @@ public sealed class ProgramsPlugin : IPlugin
             _logger.LogWarning(ex, "Programs önbelleği yüklenemedi");
         }
 
-        RefreshTask = Task.Run(RefreshCore);
+        var token = _shutdown.Token;
+        RefreshTask = Task.Run(() => RefreshCore(token));
         return Task.CompletedTask;
+    }
+
+    /// <summary>Uygulama kapanırken arka plan taramasını iptal eder; yarım tarama önbelleğe yazılmaz.</summary>
+    public void Dispose()
+    {
+        _shutdown.Cancel();
+        try
+        {
+            RefreshTask.Wait(TimeSpan.FromSeconds(2));
+        }
+        catch (AggregateException)
+        {
+            // Tarama hatası RefreshCore içinde loglandı.
+        }
+
+        _shutdown.Dispose();
     }
 
     public Task<IReadOnlyList<Result>> QueryAsync(Query query, CancellationToken cancellationToken)
@@ -88,8 +109,10 @@ public sealed class ProgramsPlugin : IPlugin
                 .ThenBy(x => x.Entry.Name, StringComparer.CurrentCultureIgnoreCase);
         }
 
+        // İkon yüklemek pahalı: yalnızca listede gösterilebilecek kadar (Settings.MaxResults) sonuç üretilir.
+        var limit = _settings is null ? MaxReturned : Math.Clamp(_settings.MaxResults, 1, MaxReturned);
         var results = new List<Result>();
-        foreach (var (entry, score) in scored.Take(MaxReturned))
+        foreach (var (entry, score) in scored.Take(limit))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var path = entry.ShortcutPath;
@@ -107,14 +130,19 @@ public sealed class ProgramsPlugin : IPlugin
         return Task.FromResult<IReadOnlyList<Result>>(results);
     }
 
-    private void RefreshCore()
+    private void RefreshCore(CancellationToken cancellationToken)
     {
         try
         {
-            var scanned = _scanner.Scan();
+            var scanned = _scanner.Scan(cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
             _entries = scanned.ToArray();
             _cacheStorage.Save(new ProgramCache { ScannedAtUtc = DateTime.UtcNow, Programs = scanned });
             _logger.LogInformation("Programs taraması bitti: {Count} uygulama", scanned.Count);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger.LogInformation("Programs taraması iptal edildi");
         }
         catch (Exception ex)
         {
