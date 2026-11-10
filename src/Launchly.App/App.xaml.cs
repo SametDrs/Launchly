@@ -1,6 +1,11 @@
 using System.IO;
 using System.Windows;
+using System.Windows.Interop;
 using System.Windows.Threading;
+using Launchly.App.Hotkey;
+using Launchly.App.Interop;
+using Launchly.App.Tray;
+using Launchly.App.ViewModels;
 using Launchly.Core;
 using Launchly.Core.Storage;
 using Microsoft.Extensions.DependencyInjection;
@@ -13,6 +18,8 @@ namespace Launchly.App;
 public partial class App : Application
 {
     private IHost? _host;
+    private HotkeyManager? _hotkey;
+    private TrayIcon? _tray;
 
     public IServiceProvider Services =>
         _host?.Services ?? throw new InvalidOperationException("Host henüz başlatılmadı.");
@@ -43,12 +50,32 @@ public partial class App : Application
         var settings = Services.GetRequiredService<Settings>();
         Log.Information("Launchly başladı. Ayar dosyası: {Path}, kısayol: {Hotkey}", DataLocation.SettingsPath, settings.Hotkey);
 
-        MainWindow = Services.GetRequiredService<MainWindow>();
-        MainWindow.Show();
+        var window = Services.GetRequiredService<MainWindow>();
+        MainWindow = window;
+
+        // Tutamak oluşturulur ama pencere gösterilmez: Launchly gizli başlar, kısayolla açılır.
+        var hwnd = new WindowInteropHelper(window).EnsureHandle();
+        var applied = WindowBackdrop.Apply(window, settings.Backdrop);
+        Log.Information("Arka plan: istenen {Requested}, uygulanan {Applied}", settings.Backdrop, applied);
+
+        _tray = new TrayIcon(window.ShowLauncher, Shutdown);
+
+        _hotkey = new HotkeyManager();
+        _hotkey.Pressed += window.ToggleLauncher;
+        if (!_hotkey.TryRegister(hwnd, settings.Hotkey, out var error))
+        {
+            Log.Warning("Kısayol kaydedilemedi: {Error}", error);
+            // Kısayol yoksa kullanıcı yine de uygulamaya ulaşabilsin: pencereyi aç ve nedenini göster.
+            window.ShowLauncher();
+            System.Windows.MessageBox.Show(error, "Launchly", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
     }
 
     protected override void OnExit(ExitEventArgs e)
     {
+        _hotkey?.Dispose();
+        _tray?.Dispose();
+
         if (_host is not null)
         {
             Services.GetRequiredService<JsonStorage<Settings>>().Save(Services.GetRequiredService<Settings>());
@@ -71,6 +98,7 @@ public partial class App : Application
             DataLocation.SettingsPath,
             sp.GetRequiredService<ILogger<JsonStorage<Settings>>>()));
         services.AddSingleton(sp => sp.GetRequiredService<JsonStorage<Settings>>().Load());
+        services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
     }
 

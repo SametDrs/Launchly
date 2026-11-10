@@ -12,6 +12,9 @@ public sealed class Settings
     /// <summary>Pencereyi açan kısayol.</summary>
     public string Hotkey { get; set; } = "Alt+Space";
 
+    /// <summary>Pencere arka planı: None (düz koyu), Mica veya Acrylic. Desteklenmiyorsa düz renge düşer.</summary>
+    public BackdropType Backdrop { get; set; } = BackdropType.Mica;
+
     /// <summary>Gösterilecek en fazla sonuç sayısı.</summary>
     public int MaxResults { get; set; } = 8;
 

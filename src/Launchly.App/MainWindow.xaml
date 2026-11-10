@@ -1,10 +1,85 @@
 <Window x:Class="Launchly.App.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="clr-namespace:Launchly.App.ViewModels"
         Title="Launchly"
-        Width="720"
-        Height="120"
-        WindowStartupLocation="CenterScreen">
-    <!-- Geçici boş pencere; asıl tasarım 02-pencere görevinde. -->
-    <Grid />
+        Width="760"
+        SizeToContent="Height"
+        WindowStyle="None"
+        ResizeMode="NoResize"
+        ShowInTaskbar="False"
+        Topmost="True"
+        Background="Transparent"
+        FontFamily="Segoe UI Variable Text, Segoe UI"
+        UseLayoutRounding="True"
+        TextOptions.TextFormattingMode="Display">
+    <Border Background="{DynamicResource WindowBackgroundBrush}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <!-- Arama kutusu -->
+            <Border Grid.Row="0" Height="68" BorderBrush="{StaticResource AccentBrush}" BorderThickness="0,0,0,2">
+                <Grid Margin="22,0,22,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="&#xE721;" FontFamily="{StaticResource IconFont}"
+                               FontSize="20" Foreground="{StaticResource SubTextBrush}"
+                               VerticalAlignment="Center" Margin="0,0,14,0" />
+                    <TextBox x:Name="SearchBox" Grid.Column="1"
+                             Style="{StaticResource SearchTextBoxStyle}"
+                             Text="{Binding QueryText, UpdateSourceTrigger=PropertyChanged}"
+                             VerticalAlignment="Center" />
+                </Grid>
+            </Border>
+
+            <!-- Sonuç listesi -->
+            <ListView x:Name="ResultList" Grid.Row="1" MaxHeight="430"
+                      Style="{StaticResource ResultListStyle}"
+                      ItemContainerStyle="{StaticResource ResultItemStyle}"
+                      ItemsSource="{Binding Results}"
+                      SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
+                      SelectionMode="Single">
+                <ListView.ItemTemplate>
+                    <DataTemplate DataType="{x:Type vm:ResultItemViewModel}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="Auto" />
+                            </Grid.ColumnDefinitions>
+                            <Border Grid.Column="0" Width="34" Height="34" CornerRadius="8"
+                                    Background="{Binding IconColor}" Margin="0,0,14,0">
+                                <TextBlock Text="{Binding Glyph}" FontFamily="{StaticResource IconFont}"
+                                           FontSize="18" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center" />
+                            </Border>
+                            <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="16"
+                                       Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis" />
+                            <TextBlock Grid.Column="2" Text="{Binding TypeLabel}" FontSize="13"
+                                       Foreground="{StaticResource SubTextBrush}" VerticalAlignment="Center"
+                                       Margin="12,0,0,0" />
+                        </Grid>
+                    </DataTemplate>
+                </ListView.ItemTemplate>
+            </ListView>
+
+            <!-- Alt çubuk -->
+            <Border Grid.Row="2" Height="40" Background="{StaticResource FooterBrush}"
+                    BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0">
+                <Grid Margin="12,0">
+                    <Button x:Name="SettingsButton" Content="Settings" HorizontalAlignment="Left"
+                            Style="{StaticResource FooterButtonStyle}" />
+                    <Button x:Name="ActionsButton" Content="Actions" HorizontalAlignment="Right"
+                            Style="{StaticResource FooterButtonStyle}" />
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
 </Window>
