@@ -37,7 +37,7 @@ public sealed class SingleInstance : IDisposable
             // İlk örnek PID'ini paylaşır; ikinci örnek yalnızca ona ön plan hakkı verir.
             try
             {
-                _pidFile = MemoryMappedFile.CreateNew(_pidName, sizeof(int));
+                _pidFile = MemoryMappedFile.CreateOrOpen(_pidName, sizeof(int));   // eski/artık bir eşleme varsa bile açılır, PID yine yazılır
                 using var view = _pidFile.CreateViewAccessor();
                 view.Write(0, Environment.ProcessId);
             }

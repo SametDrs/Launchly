@@ -10,13 +10,19 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly PluginManager _pluginManager;
     private readonly ILogger<MainViewModel> _logger;
     private readonly SynchronizationContext? _uiContext;
-    private readonly object _generationGate = new();
-    private int _generation;      // yalnızca _generationGate altında okunur/yazılır
-    private int _executing;
-    private CancellationTokenSource? _pendingEnter;
 
-    // Güncel neslin sonucu listeye uygulanınca (ya da nesil boşa çıkınca) tamamlanır; Enter bunu bekler.
-    private TaskCompletionSource _applied = CompletedSignal();
+    // Sahiplik modeli: aşağıdaki alanların hepsi YALNIZCA _gate altında okunur/yazılır. Arka plan (PluginManager)
+    // bunlara doğrudan dokunmaz; yalnızca nesil + sıra damgalı mesaj gönderir (HandleResults, MarkUnfinished) ve
+    // mesaj _gate altında değerlendirilir. Post sırasına (FIFO) güvenilmez: eski nesil ve sırası geçmiş yayın atılır.
+    // Sorgu mesajlarının Results/SelectedIndex yazımı da _gate altındadır. _gate tutulurken PluginManager çağrılmaz
+    // (PluginManager kendi kilidi altında yayın yapar; ters sıralı kilit oluşmasın).
+    private readonly object _gate = new();
+    private int _generation;                                  // her yeni sorgu/boş ekran bir nesil
+    private GenerationState _state = GenerationState.Final;   // güncel neslin durumu
+    private int _appliedSequence;                             // güncel nesilde uygulanan son yayının sırası
+    private IReadOnlyList<Result>? _appliedSource;            // son uygulanan anlık görüntü (aynı nesne yeniden uygulanmaz)
+    private PendingEnter? _pendingEnter;                      // sonucu bekleyen Enter (en çok bir tane)
+    private bool _running;                                    // bir Enter'ın eylemi çalışıyor
 
     [ObservableProperty]
     private string _queryText = string.Empty;
@@ -36,6 +42,13 @@ public sealed partial class MainViewModel : ObservableObject
         _uiContext = SynchronizationContext.Current;
     }
 
+    private enum GenerationState
+    {
+        Running,    // sorgu sürüyor; Enter son yayını bekler
+        Final,      // son yayın uygulandı; Enter hemen çalışır
+        Unfinished, // sorgu son yayın olmadan bitti (iptal/hata); Enter hiçbir şey çalıştırmaz
+    }
+
     /// <summary>Seçimi <paramref name="delta"/> kadar kaydırır; uçlarda başa/sona sarar.</summary>
     public void MoveSelection(int delta)
     {
@@ -48,7 +61,7 @@ public sealed partial class MainViewModel : ObservableObject
         SelectedIndex = next < 0 ? next + Results.Count : next;
     }
 
-    /// <summary>Alt+1..9 hızlı seçim iskeleti: 1 tabanlı sıradaki sonucu seçer. Çalıştırma sonraki görevde.</summary>
+    /// <summary>Alt+1..9 hızlı seçim: 1 tabanlı sıradaki sonucu seçer (çalıştırmaz).</summary>
     public bool SelectByNumber(int number)
     {
         var index = number - 1;
@@ -62,103 +75,78 @@ public sealed partial class MainViewModel : ObservableObject
     }
 
     /// <summary>
-    /// Seçili sonucun eylemini çalıştırır. Dönüş: pencere gizlenmeli mi (eylem true döndürdüyse).
-    /// Seçim yoksa, eylem tanımsızsa ya da eylem hata verirse false.
+    /// Seçili sonucun eylemini çalıştırır. Güncel neslin sorgusu sürüyorsa önce son yayının (tüm eklentiler döndü)
+    /// uygulanmasını bekler, sonra o anki seçili öğeyi çalıştırır. Beklerken Esc/gizleme
+    /// (<see cref="CancelPendingExecute"/>), yeni sorgu ya da <see cref="Reset"/> gelirse hiçbir şey çalıştırmaz.
+    /// Devam eden (bekleyen ya da çalışan) bir yürütme varken gelen Enter yok sayılır; iptal edilmiş bekleyen
+    /// Enter'dan sonra basılan Enter ise hemen kabul edilir.
+    /// Dönüş: pencere gizlenmeli mi (eylem true döndürdüyse). Seçim/eylem yoksa ya da eylem hata verirse false.
     /// </summary>
     public async Task<bool> ExecuteSelectedAsync()
     {
-        // Yeniden giriş koruması: devam eden (bekleyen ya da çalışan) bir yürütme varken yeni Enter yok sayılır.
-        if (Interlocked.CompareExchange(ref _executing, 1, 0) != 0)
+        PendingEnter? pending = null;
+        Result? selected = null;
+        lock (_gate)
         {
-            return false;
-        }
-
-        try
-        {
-            if (!await WaitForCurrentResultsAsync())
+            if (_running || _pendingEnter is not null || _state == GenerationState.Unfinished)
             {
                 return false;
             }
 
-            return await RunSelectedAsync();
+            if (_state == GenerationState.Final)
+            {
+                _running = true;
+                selected = Selected?.Result;
+            }
+            else
+            {
+                pending = _pendingEnter = new PendingEnter(_generation);
+            }
+        }
+
+        if (pending is not null)
+        {
+            await pending.Wake.Task;
+            lock (_gate)
+            {
+                // Uyanma nedeni ne olursa olsun karar tek yerde: bu Enter hâlâ bekleyen mi, nesil aynı mı, son yayın
+                // uygulandı mı. Uyanmayla buraya gelmek arasında gelen iptal de böylece kazanır. İptal edilen Enter
+                // ortak duruma dokunmaz (o arada basılmış yeni bir Enter'ın kaydı silinmez).
+                if (!ReferenceEquals(_pendingEnter, pending))
+                {
+                    return false;
+                }
+
+                _pendingEnter = null;
+                if (_generation != pending.Generation || _state != GenerationState.Final)
+                {
+                    return false;
+                }
+
+                _running = true;
+                selected = Selected?.Result;
+            }
+        }
+
+        try
+        {
+            return await RunActionAsync(selected);
         }
         finally
         {
-            Volatile.Write(ref _executing, 0);
+            lock (_gate)
+            {
+                _running = false;
+            }
         }
     }
 
     /// <summary>Bekleyen Enter'ı iptal eder (Esc, pencere gizleme). Çalışmaya başlamış eylem durdurulmaz.</summary>
     public void CancelPendingExecute()
     {
-        CancellationTokenSource? cts;
-        lock (_generationGate)
+        lock (_gate)
         {
-            cts = _pendingEnter;
-            _pendingEnter = null;
-        }
-
-        cts?.Cancel();
-    }
-
-    // Enter'ın bastığı andaki neslin sonucu uygulanana kadar bekler. Nesil değişirse (yeni sorgu, Reset) ya da
-    // iptal edilirse (Esc, gizleme) false döner: bekleyen Enter sonraki nesillere geçmez.
-    private async Task<bool> WaitForCurrentResultsAsync()
-    {
-        Task pending;
-        int generation;
-        using var cts = new CancellationTokenSource();
-        lock (_generationGate)
-        {
-            pending = _applied.Task;
-            generation = _generation;
-            if (!pending.IsCompleted)
-            {
-                _pendingEnter = cts;
-            }
-        }
-
-        try
-        {
-            if (!pending.IsCompleted)
-            {
-                await pending.WaitAsync(cts.Token);
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            return false;
-        }
-        finally
-        {
-            lock (_generationGate)
-            {
-                if (ReferenceEquals(_pendingEnter, cts))
-                {
-                    _pendingEnter = null;
-                }
-            }
-        }
-
-        return IsCurrent(generation);
-    }
-
-    private async Task<bool> RunSelectedAsync()
-    {
-        var action = Selected?.Result.Action;
-        if (action is null)
-        {
-            return false;
-        }
-
-        try
-        {
-            return await action();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Sonuç eylemi başarısız: {Title}", Selected?.Title);
-            return false;
+            CancelPendingEnterLocked();
         }
     }
 
@@ -175,11 +163,17 @@ public sealed partial class MainViewModel : ObservableObject
         return true;
     }
 
-    /// <summary>Pencere her açıldığında çağrılır: kutuyu ve listeyi temizler.</summary>
+    /// <summary>Pencere her açıldığında çağrılır: kutuyu ve listeyi temizler; bekleyen Enter iptal olur.</summary>
     public void Reset()
     {
-        QueryText = string.Empty;
-        ClearResults();
+        if (QueryText.Length == 0)
+        {
+            StartQuery(string.Empty);   // metin değişmeyince OnQueryTextChanged tetiklenmez
+        }
+        else
+        {
+            QueryText = string.Empty;   // OnQueryTextChanged -> StartQuery
+        }
     }
 
     private ResultItemViewModel? Selected =>
@@ -187,121 +181,128 @@ public sealed partial class MainViewModel : ObservableObject
 
     partial void OnQueryTextChanged(string value) => StartQuery(value);
 
-    private static TaskCompletionSource CompletedSignal()
+    // _gate altında: bekleyen Enter'ı bırakır ve uyandırır; uyanan Enter sahipliği kaybettiğini görüp hiçbir şey çalıştırmaz.
+    // Wake devamları eşzamansız çalışır (RunContinuationsAsynchronously): kilit altında tamamlamak güvenli.
+    private void CancelPendingEnterLocked()
     {
-        var tcs = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        tcs.SetResult();
-        return tcs;
+        var pending = _pendingEnter;
+        _pendingEnter = null;
+        pending?.Wake.TrySetResult();
     }
 
-    // Yeni nesil başlatır; önceki nesli bekleyenler (Enter) uyandırılır ve yeni nesli beklemeye geçer.
-    private int BeginGeneration()
+    private async Task<bool> RunActionAsync(Result? result)
     {
-        TaskCompletionSource old;
-        CancellationTokenSource? pendingEnter;
-        int generation;
-        lock (_generationGate)
+        if (result?.Action is not { } action)
         {
-            old = _applied;
-            _applied = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            generation = ++_generation;
-            pendingEnter = _pendingEnter;
-            _pendingEnter = null;
+            return false;
         }
 
-        pendingEnter?.Cancel();
-        old.TrySetResult();
-        return generation;
-    }
-
-    private bool IsCurrent(int generation)
-    {
-        lock (_generationGate)
+        try
         {
-            return generation == _generation;
+            return await action();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Sonuç eylemi başarısız: {Title}", result.Title);
+            return false;
         }
     }
 
-    private void CompleteGeneration(int generation)
-    {
-        lock (_generationGate)
-        {
-            if (generation == _generation)
-            {
-                _applied.TrySetResult();
-            }
-        }
-    }
-
+    // Yeni nesil başlatır: önceki neslin bekleyen Enter'ı iptal edilir (sonraki nesle geçmez), eski mesajlar artık atılır.
     private void StartQuery(string text)
     {
-        var generation = BeginGeneration();
-
-        if (string.IsNullOrWhiteSpace(text))
+        int generation;
+        lock (_gate)
         {
-            ShowHome(generation);
-            return;
+            generation = ++_generation;
+            _state = GenerationState.Running;
+            _appliedSequence = 0;
+            CancelPendingEnterLocked();
         }
 
-        _ = RunQueryAsync(text, generation);
-    }
-
-    private void ClearResults() => ShowHome(BeginGeneration());
-
-    // Kutu boş: boş sorguyu destekleyen eklenti (Programs) varsa onun listesi gösterilir, yoksa liste temizlenir.
-    // Eski liste, yeni liste gelene kadar tutulur (titreme yok).
-    private void ShowHome(int generation)
-    {
-        _pluginManager.CancelCurrent();
-        if (_pluginManager.HasEmptyQueryPlugins)
+        if (!string.IsNullOrWhiteSpace(text))
         {
+            _ = RunQueryAsync(text, generation);
+        }
+        else if (_pluginManager.HasEmptyQueryPlugins)
+        {
+            // Kutu boş: boş sorguyu destekleyen eklenti (Programs) listesi. Eski liste yenisi gelene kadar tutulur (titreme yok).
             _ = RunQueryAsync(string.Empty, generation);
         }
         else
         {
-            ApplyResults([]);
-            CompleteGeneration(generation);
+            // Çalışan sorgu iptal edilir (yayını zaten bu nesilde atılırdı); liste hemen temizlenir.
+            _pluginManager.CancelCurrent();
+            HandleResults(generation, sequence: 1, [], isFinal: true);
         }
     }
 
     private async Task RunQueryAsync(string text, int generation)
     {
-        var published = 0;
+        // PluginManager bir sorgunun yayınlarını sırayla yapar (aynı anda tek): bu yerel değişkenlere sırayla yazılır;
+        // await sonrası okuma, görevin tamamlanmasıyla son yayından sonraya sıralanır.
+        var sequence = 0;
+        var finalPublished = false;
         try
         {
-            await _pluginManager.QueryAsync(text, results =>
+            await _pluginManager.QueryAsync(text, (results, isFinal) =>
             {
-                Volatile.Write(ref published, 1);
-                PostResults(generation, results);
-            });
+                var seq = ++sequence;
+                finalPublished |= isFinal;
+                Post(() => HandleResults(generation, seq, results, isFinal));
+            }).ConfigureAwait(false);   // devamı yalnızca _gate altındaki duruma dokunur; UI'a dönmesi gerekmez
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Sorgu çalıştırılamadı: {Query}", text);
         }
-        finally
+
+        if (!finalPublished)
         {
-            // Yayın yapıldıysa tamamlama, sonucu uygulayan callback'tedir (PostResults); sıraya güvenilmez.
-            // Yalnızca hiç yayın yapılmadan biten (iptal/hata/sonuçsuz) sorguda burada tamamlanır.
-            if (Volatile.Read(ref published) == 0)
+            MarkUnfinished(generation);
+        }
+    }
+
+    // Sorgu son yayın olmadan bitti (iptal/hata): bu nesil artık tamamlanmayacak, bekleyen Enter hiçbir şey çalıştırmaz.
+    // Arka plandan doğrudan çağrılır; yalnızca _gate altındaki duruma dokunur. Nesil değiştiyse etkisizdir.
+    private void MarkUnfinished(int generation)
+    {
+        lock (_gate)
+        {
+            if (generation == _generation && _state == GenerationState.Running)
             {
-                Post(() => CompleteGeneration(generation));
+                _state = GenerationState.Unfinished;
+                CancelPendingEnterLocked();
             }
         }
     }
 
-    // Arka plan iş parçacığından çağrılır. Bir sonraki sorgu başlamışsa (nesil değişmişse) sonuç atılır:
-    // Post ile UI kuyruğuna girmiş eski bir yayın bile ekrana düşmez.
-    private void PostResults(int generation, IReadOnlyList<Result> results)
+    // Bir yayını uygular (UI bağlamında). Eski nesil ya da daha yeni bir yayından sonra gelen yayın atılır; böylece
+    // Post sırası karışsa da liste son yayında kalır. Son yayın bekleyen Enter'ı uyandırır.
+    private void HandleResults(int generation, int sequence, IReadOnlyList<Result> results, bool isFinal)
     {
-        Post(() =>
+        lock (_gate)
         {
-            if (IsCurrent(generation))
+            if (generation != _generation || sequence <= _appliedSequence)
             {
-                ApplyResults(results);
-                CompleteGeneration(generation);
+                return;
             }
-        });
+
+            _appliedSequence = sequence;
+            if (!ReferenceEquals(results, _appliedSource))
+            {
+                // Değişmemiş son yayın (aynı nesne) yeniden uygulanmaz: kullanıcının seçimi sıfırlanmaz.
+                _appliedSource = results;
+                Results = results.Select(r => new ResultItemViewModel(r)).ToList();
+                SelectedIndex = results.Count > 0 ? 0 : -1;
+            }
+
+            if (isFinal)
+            {
+                _state = GenerationState.Final;
+                _pendingEnter?.Wake.TrySetResult();
+            }
+        }
     }
 
     private void Post(Action action)
@@ -316,9 +317,11 @@ public sealed partial class MainViewModel : ObservableObject
         }
     }
 
-    private void ApplyResults(IReadOnlyList<Result> results)
+    /// <summary>Bekleyen Enter. <see cref="Wake"/> yalnızca uyandırır; çalıştırma kararı uyanınca _gate altında verilir.</summary>
+    private sealed class PendingEnter(int generation)
     {
-        Results = results.Select(r => new ResultItemViewModel(r)).ToList();
-        SelectedIndex = results.Count > 0 ? 0 : -1;
+        public int Generation { get; } = generation;
+
+        public TaskCompletionSource Wake { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     }
 }

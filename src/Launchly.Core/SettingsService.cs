@@ -161,7 +161,13 @@ public sealed class SettingsService
             _logger.LogError(ex, "Ayarlar kaydedilemedi");
             _plugins.RefreshKeywords();
             Applied?.Invoke(_live);
-            return new SettingsApplyResult(false, "Ayarlar uygulandı ancak dosyaya yazılamadı: " + ex.Message);
+            var saveError = "Ayarlar uygulandı ancak dosyaya yazılamadı: " + ex.Message;
+            if (hotkeyWarning is not null)
+            {
+                saveError += " Ayrıca kısayol kaydedilemedi: " + hotkeyWarning;
+            }
+
+            return new SettingsApplyResult(false, saveError);
         }
 
         _plugins.RefreshKeywords();

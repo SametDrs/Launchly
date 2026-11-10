@@ -106,7 +106,27 @@ public sealed class PluginManager : IDisposable
     /// çağrılır (sonuç yoksa boş liste). Çağrı, yayın sırasında kilit altındadır: kısa tutun (ör. UI'a Post).
     /// Eklentiler bitince ya da sorgu iptal edilince döner.
     /// </summary>
-    public async Task QueryAsync(string? raw, Action<IReadOnlyList<Result>> publish, CancellationToken cancellationToken = default)
+    public Task QueryAsync(string? raw, Action<IReadOnlyList<Result>> publish, CancellationToken cancellationToken = default)
+    {
+        // Son yayın, değişiklik yoksa önceki anlık görüntünün aynısıdır (aynı nesne); burada tekrar verilmez.
+        IReadOnlyList<Result>? last = null;
+        return QueryAsync(raw, (results, _) =>
+        {
+            if (!ReferenceEquals(results, last))
+            {
+                last = results;
+                publish(results);
+            }
+        }, cancellationToken);
+    }
+
+    /// <summary>
+    /// Tek parametreli yayın temsilcisi alan aşırı yüklemeyle aynı; ek olarak
+    /// <c>isFinal</c>: tüm eklentiler döndükten sonraki son yayında true (sorgu başına tam bir kez; iptal edilen
+    /// sorguda hiç). Son yayın, son toplu yayından sonra yeni sonuç gelmediyse önceki listenin aynı nesnesidir.
+    /// Bir sorgunun yayınları sıralıdır ve aynı anda iki tane çalışmaz.
+    /// </summary>
+    public async Task QueryAsync(string? raw, Action<IReadOnlyList<Result>, bool> publish, CancellationToken cancellationToken = default)
     {
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         var token = cts.Token;
@@ -130,7 +150,7 @@ public sealed class PluginManager : IDisposable
 
             if (plugins.Count == 0)
             {
-                PublishIfCurrent(cts, publish, []);
+                PublishIfCurrent(cts, publish, [], isFinal: true);
                 return;
             }
 
@@ -162,11 +182,11 @@ public sealed class PluginManager : IDisposable
         CancelCurrent();
     }
 
-    private async Task ConsumeAsync(ChannelReader<Result[]> reader, CancellationTokenSource cts, Action<IReadOnlyList<Result>> publish)
+    private async Task ConsumeAsync(ChannelReader<Result[]> reader, CancellationTokenSource cts, Action<IReadOnlyList<Result>, bool> publish)
     {
         var token = cts.Token;
         var all = new List<Result>();
-        var published = false;
+        IReadOnlyList<Result>? last = null;
 
         while (await reader.WaitToReadAsync(token).ConfigureAwait(false))
         {
@@ -176,13 +196,24 @@ public sealed class PluginManager : IDisposable
             await Task.Delay(MergeWindow, token).ConfigureAwait(false);
             Drain(reader, all);
 
-            published |= PublishIfCurrent(cts, publish, Sort(all));
+            // Kanal tamamlandı ve boşaldıysa (tüm eklentiler döndü) bu yayın sondur.
+            var snapshot = Sort(all);
+            var isFinal = reader.Completion.IsCompleted;
+            if (!PublishIfCurrent(cts, publish, snapshot, isFinal))
+            {
+                return;   // iptal edildi: başka yayın yok
+            }
+
+            if (isFinal)
+            {
+                return;
+            }
+
+            last = snapshot;
         }
 
-        if (!published)
-        {
-            PublishIfCurrent(cts, publish, []);
-        }
+        // Eklentiler son toplu yayından sonra (yeni sonuç vermeden) bitti ya da hiç sonuç gelmedi.
+        PublishIfCurrent(cts, publish, last ?? [], isFinal: true);
     }
 
     private static void Drain(ChannelReader<Result[]> reader, List<Result> into)
@@ -197,7 +228,7 @@ public sealed class PluginManager : IDisposable
         all.OrderByDescending(r => r.Score).Take(Math.Max(1, _settings.MaxResults)).ToList();
 
     /// <summary>Yalnızca hâlâ güncel sorguysa yayınlar; kilit, iptalle yayının yarışmasını önler.</summary>
-    private bool PublishIfCurrent(CancellationTokenSource cts, Action<IReadOnlyList<Result>> publish, IReadOnlyList<Result> results)
+    private bool PublishIfCurrent(CancellationTokenSource cts, Action<IReadOnlyList<Result>, bool> publish, IReadOnlyList<Result> results, bool isFinal)
     {
         lock (_gate)
         {
@@ -206,7 +237,7 @@ public sealed class PluginManager : IDisposable
                 return false;
             }
 
-            publish(results);
+            publish(results, isFinal);
             return true;
         }
     }

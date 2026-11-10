@@ -253,6 +253,22 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Fact]
+    public void Apply_SaveFails_ErrorAlsoMentionsHotkeyWarning()
+    {
+        _hotkey.Taken.Add("Alt+Space");
+        _hotkey.TryRegister("Alt+Space", out _);       // mevcut kayıt başarısız; yeniden denemede de çakışır
+        Directory.CreateDirectory(_storage.FilePath + ".tmp");   // geçici dosya yazımı başarısız olur
+
+        var draft = _service.CreateDraft();
+        draft.HideOnFocusLost = !_live.HideOnFocusLost;
+        var result = _service.Apply(draft);
+
+        Assert.False(result.Success);
+        Assert.Contains("dosyaya yazılamadı", result.Error);
+        Assert.Contains("kullanımda", result.Error);
+    }
+
+    [Fact]
     public void Normalize_InvalidHotkey_FallsBackToDefault()
     {
         foreach (var bad in new[] { "Shift+F12", "A", "", "Alt+", "Ctrl+Alt"})

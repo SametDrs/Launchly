@@ -462,4 +462,84 @@ public class PluginManagerTests
         Assert.Empty(log.Last);
         Assert.Equal(0, plugin.QueryCount);
     }
+
+    // --- Son yayın (isFinal) ---
+
+    [Fact]
+    public async Task IsFinal_TrueExactlyOnce_OnLastPublish_AfterSlowPlugin()
+    {
+        var releaseSlow = new TaskCompletionSource();
+        var fast = Global("fast", R("fast", 1));
+        var slow = new FakePlugin("slow", ["*"], async (_, _) =>
+        {
+            await releaseSlow.Task;
+            return [R("slow", 9)];
+        });
+        using var manager = CreateManager([fast, slow]);
+        await manager.InitializeAsync();
+        var log = new List<(string[] Titles, bool IsFinal)>();
+
+        var query = manager.QueryAsync("x", (results, isFinal) =>
+        {
+            lock (log)
+            {
+                log.Add((results.Select(r => r.Title).ToArray(), isFinal));
+            }
+        });
+        await WaitUntilAsync(() => { lock (log) { return log.Count > 0; } }, "hızlı eklentinin kısmi yayını");
+        lock (log)
+        {
+            Assert.False(log[0].IsFinal);   // yavaş eklenti sürerken son yayın değil
+        }
+
+        releaseSlow.SetResult();
+        await query.WaitAsync(TestTimeout);
+
+        lock (log)
+        {
+            Assert.Single(log, e => e.IsFinal);
+            Assert.True(log[^1].IsFinal);
+            Assert.Equal(new[] { "slow", "fast" }, log[^1].Titles);
+        }
+    }
+
+    [Theory]
+    [InlineData("x")]       // eklenti sonuç vermiyor
+    [InlineData("   ")]     // boş kutu, eklenti yok
+    public async Task IsFinal_PublishedOnce_WhenNoResults(string text)
+    {
+        using var manager = CreateManager([new FakePlugin("p", ["*"], (_, _) => Results())]);
+        await manager.InitializeAsync();
+        var log = new List<bool>();
+
+        await manager.QueryAsync(text, (results, isFinal) =>
+        {
+            Assert.Empty(results);
+            log.Add(isFinal);
+        });
+
+        Assert.Equal(new[] { true }, log);
+    }
+
+    [Fact]
+    public async Task IsFinal_NeverPublished_ForCancelledQuery()
+    {
+        var started = new TaskCompletionSource();
+        var plugin = new FakePlugin("p", ["*"], async (_, ct) =>
+        {
+            started.SetResult();
+            await Task.Delay(System.Threading.Timeout.Infinite, ct);
+            return [R("never")];
+        });
+        using var manager = CreateManager([plugin]);
+        await manager.InitializeAsync();
+        var finals = 0;
+
+        var query = manager.QueryAsync("x", (_, isFinal) => { if (isFinal) { Interlocked.Increment(ref finals); } });
+        await started.Task.WaitAsync(TestTimeout);
+        manager.CancelCurrent();
+        await query.WaitAsync(TestTimeout);
+
+        Assert.Equal(0, finals);
+    }
 }

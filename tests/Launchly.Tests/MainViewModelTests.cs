@@ -14,6 +14,81 @@ public class MainViewModelTests
         return (new MainViewModel(manager, NullLogger<MainViewModel>.Instance), manager);
     }
 
+    private static async Task<(MainViewModel Vm, Launchly.Core.Plugins.PluginManager Manager, ManualSyncContext Ctx)> CreateWithManualContextAsync(params FakePlugin[] plugins)
+    {
+        var manager = CreateManager(plugins);
+        await manager.InitializeAsync();
+        var ctx = new ManualSyncContext();
+        return (ctx.Run(() => new MainViewModel(manager, NullLogger<MainViewModel>.Instance)), manager, ctx);
+    }
+
+    /// <summary>Elle pompalanan UI bağlamı: Post kuyruğa girer; test istediği anda (isterse ters sırada) çalıştırır.</summary>
+    private sealed class ManualSyncContext : SynchronizationContext
+    {
+        private readonly object _gate = new();
+        private readonly List<(SendOrPostCallback Callback, object? State)> _queue = [];
+
+        public int Count
+        {
+            get
+            {
+                lock (_gate)
+                {
+                    return _queue.Count;
+                }
+            }
+        }
+
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            lock (_gate)
+            {
+                _queue.Add((d, state));
+            }
+        }
+
+        /// <summary>Şu an kuyrukta olanları çalıştırır; bu sırada kuyruğa girenler bir sonraki çağrıya kalır.</summary>
+        public void RunQueued(bool reverse = false)
+        {
+            List<(SendOrPostCallback Callback, object? State)> batch;
+            lock (_gate)
+            {
+                batch = [.. _queue];
+                _queue.Clear();
+            }
+
+            if (reverse)
+            {
+                batch.Reverse();
+            }
+
+            Run(() =>
+            {
+                foreach (var (callback, state) in batch)
+                {
+                    callback(state);
+                }
+
+                return 0;
+            });
+        }
+
+        /// <summary>Temsilciyi bu bağlam geçerliyken çalıştırır (içindeki await devamları bu kuyruğa düşer).</summary>
+        public T Run<T>(Func<T> func)
+        {
+            var previous = Current;
+            SetSynchronizationContext(this);
+            try
+            {
+                return func();
+            }
+            finally
+            {
+                SetSynchronizationContext(previous);
+            }
+        }
+    }
+
     private static string[] Titles(MainViewModel vm) => vm.Results.Select(r => r.Title).ToArray();
 
     [Fact]
@@ -307,6 +382,180 @@ public class MainViewModelTests
         Assert.False(await second);                     // devam eden yürütme varken yok sayıldı
         Assert.True(await first);
         Assert.Equal(["res-slow"], ran);
+    }
+
+    // Hızlı eklenti düşük puanlı sonucu önce yayınlar; yavaş eklenti yüksek puanlıyı sonra. Enter kısmi yayında değil,
+    // son yayında serbest kalır ve o anki seçiliyi (yüksek puanlı) çalıştırır.
+    private static (FakePlugin Fast, FakePlugin Slow, TaskCompletionSource ReleaseSlow) FastLowSlowHigh(List<string> ran)
+    {
+        var releaseSlow = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var fast = new FakePlugin("fast", ["*"], (_, _) => Results(
+            R("fast-low", 1, () => { lock (ran) { ran.Add("fast-low"); } return Task.FromResult(true); })));
+        var slow = new FakePlugin("slow", ["*"], async (_, _) =>
+        {
+            await releaseSlow.Task;
+            return [R("slow-high", 9, () => { lock (ran) { ran.Add("slow-high"); } return Task.FromResult(true); })];
+        });
+        return (fast, slow, releaseSlow);
+    }
+
+    [Fact]
+    public async Task PendingEnter_WaitsForSlowHighScorePlugin_NotFirstPartialPublish()
+    {
+        var ran = new List<string>();
+        var (fast, slow, releaseSlow) = FastLowSlowHigh(ran);
+        var (vm, manager) = await CreateAsync(fast, slow);
+        using var m = manager;
+        vm.QueryText = "q";
+        await WaitUntilAsync(() => Titles(vm).SequenceEqual(["fast-low"]), "hızlı eklentinin kısmi yayını");
+
+        var enter = vm.ExecuteSelectedAsync();
+        await Task.Delay(50);
+        Assert.False(enter.IsCompleted);                // kısmi yayın Enter'ı serbest bırakmadı
+        releaseSlow.SetResult();
+
+        Assert.True(await enter.WaitAsync(TestTimeout));
+        Assert.Equal(["slow-high"], ran);
+        Assert.Equal(["slow-high", "fast-low"], Titles(vm));
+    }
+
+    [Fact]
+    public async Task PendingEnter_PostsRunInReverseOrder_FinalPublishStillWins()
+    {
+        // FIFO olmayan bağlam: kuyruktaki iletiler ters sırada çalıştırılır (kısmi yayın, son yayından sonra gelir).
+        var ran = new List<string>();
+        var (fast, slow, releaseSlow) = FastLowSlowHigh(ran);
+        var (vm, manager, ctx) = await CreateWithManualContextAsync(fast, slow);
+        using var m = manager;
+        vm.QueryText = "q";
+        var enter = ctx.Run(vm.ExecuteSelectedAsync);
+        await WaitUntilAsync(() => ctx.Count >= 1, "kısmi yayın kuyrukta");
+        releaseSlow.SetResult();
+        await WaitUntilAsync(() => ctx.Count >= 2, "yavaş eklentinin yayını kuyrukta");
+
+        await WaitUntilAsync(() => { ctx.RunQueued(reverse: true); return enter.IsCompleted; }, "Enter");
+
+        Assert.True(await enter);
+        Assert.Equal(["slow-high"], ran);
+        Assert.Equal(["slow-high", "fast-low"], Titles(vm));
+    }
+
+    [Theory]
+    [InlineData("esc")]
+    [InlineData("query")]
+    [InlineData("reset")]
+    [InlineData("none")]
+    public async Task PendingEnter_CancelledAfterFinalApplied_ButBeforeEnterResumes_RunsNothing(string cancel)
+    {
+        var ran = new List<string>();
+        var (vm, manager, ctx) = await CreateWithManualContextAsync(SlowPlugin(ran, delayMs: 0));
+        using var m = manager;
+        vm.QueryText = "q";
+        var enter = ctx.Run(vm.ExecuteSelectedAsync);
+        await WaitUntilAsync(() => ctx.Count >= 1, "yayın kuyrukta");
+        await Task.Delay(100);                           // varsa tekrar eden son yayın da kuyruğa girsin
+
+        ctx.RunQueued();                                 // son yayın uygulandı; Enter'ın devamı kuyruğa girdi, henüz çalışmadı
+        Assert.Equal(["res-q"], Titles(vm));
+        Assert.False(enter.IsCompleted);
+
+        switch (cancel)
+        {
+            case "esc":
+                vm.CancelPendingExecute();
+                break;
+            case "query":
+                vm.QueryText = "q2";
+                break;
+            case "reset":
+                vm.Reset();
+                break;
+        }
+
+        await WaitUntilAsync(() => { ctx.RunQueued(); return enter.IsCompleted; }, "Enter");
+        await Task.Delay(50);
+        ctx.RunQueued();
+
+        if (cancel == "none")
+        {
+            Assert.True(await enter);
+            Assert.Equal(["res-q"], ran);
+        }
+        else
+        {
+            Assert.False(await enter);
+            Assert.Empty(ran);
+        }
+    }
+
+    [Fact]
+    public async Task PendingEnter_QueryEndsWithoutFinalPublish_RunsNothing()
+    {
+        var ran = new List<string>();
+        var started = new TaskCompletionSource();
+        var release = new TaskCompletionSource();
+        var plugin = new FakePlugin("p", ["*"], async (_, _) =>
+        {
+            started.TrySetResult();
+            await release.Task;                          // token'ı yok sayar
+            return [R("late", 1, () => { ran.Add("late"); return Task.FromResult(true); })];
+        });
+        var (vm, manager) = await CreateAsync(plugin);
+        using var m = manager;
+        vm.QueryText = "q";
+        await started.Task.WaitAsync(TestTimeout);
+
+        var enter = vm.ExecuteSelectedAsync();
+        manager.CancelCurrent();                         // ör. kapanış: sorgu son yayın olmadan biter
+
+        Assert.False(await enter.WaitAsync(TestTimeout));
+        Assert.False(await vm.ExecuteSelectedAsync());   // bu nesil tamamlanmayacak: sonraki Enter beklemeden döner
+        release.SetResult();
+        await Task.Delay(100);
+        Assert.Empty(ran);
+    }
+
+    [Fact]
+    public async Task EnterAfterCancelledPendingEnter_IsAccepted_BeforeOldEnterResumes()
+    {
+        var ran = new List<string>();
+        var (vm, manager, ctx) = await CreateWithManualContextAsync(SlowPlugin(ran, delayMs: 100));
+        using var m = manager;
+        vm.QueryText = "slow1";
+        var first = ctx.Run(vm.ExecuteSelectedAsync);
+
+        vm.QueryText = "slow2";                          // ilk Enter iptal; devamı kuyrukta, henüz çalışmadı
+        var second = ctx.Run(vm.ExecuteSelectedAsync);
+        Assert.False(second.IsCompleted);                // yok sayılmadı: yeni neslin sonucunu bekliyor
+
+        await WaitUntilAsync(() => { ctx.RunQueued(); return first.IsCompleted && second.IsCompleted; }, "iki Enter");
+
+        Assert.False(await first);
+        Assert.True(await second);
+        Assert.Equal(["res-slow2"], ran);
+    }
+
+    [Fact]
+    public async Task CancelPendingExecute_RacingWithEnterCompletion_NeverThrows()
+    {
+        var ran = new List<string>();
+        var (vm, manager) = await CreateAsync(SlowPlugin(ran, delayMs: 5));
+        using var m = manager;
+
+        for (var i = 0; i < 50; i++)
+        {
+            vm.QueryText = "slow" + i;
+            var enter = vm.ExecuteSelectedAsync();
+            var cancel = Task.Run(() =>
+            {
+                for (var j = 0; j < 20; j++)
+                {
+                    vm.CancelPendingExecute();
+                }
+            });
+            await cancel;
+            await enter;   // ObjectDisposedException fırlatmamalı
+        }
     }
 
     [Fact]

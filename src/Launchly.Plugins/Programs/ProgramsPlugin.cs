@@ -140,23 +140,55 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
         try
         {
             var scanned = _scanner.Scan(cancellationToken);
+            int kept;
             lock (_saveGate)
             {
                 // İptal edilmiş (Dispose) tarama ne listeyi ne önbelleği yazar.
                 cancellationToken.ThrowIfCancellationRequested();
-                _entries = scanned.ToArray();
-                _cacheStorage.Save(new ProgramCache { ScannedAtUtc = DateTime.UtcNow, Programs = scanned });
+
+                // Boş tarama (kök yok, hepsi hata verdi vb.) dolu listenin/önbelleğin üzerine yazılmaz.
+                kept = scanned.Count == 0 ? _entries.Length : 0;
+                if (kept == 0)
+                {
+                    _entries = scanned.ToArray();
+                    _cacheStorage.Save(new ProgramCache { ScannedAtUtc = DateTime.UtcNow, Programs = scanned });
+                }
             }
 
-            _logger.LogInformation("Programs taraması bitti: {Count} uygulama", scanned.Count);
+            if (scanned.Count == 0)
+            {
+                SafeLog(l => l.LogWarning("Programs taraması 0 uygulama buldu; mevcut liste korundu ({Kept} uygulama)", kept));
+            }
+            else
+            {
+                SafeLog(l => l.LogInformation("Programs taraması bitti: {Count} uygulama", scanned.Count));
+            }
         }
         catch (OperationCanceledException)
         {
-            _logger.LogInformation("Programs taraması iptal edildi");
+            SafeLog(l => l.LogInformation("Programs taraması iptal edildi"));
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Programs taraması başarısız");
+            SafeLog(l => l.LogError(ex, "Programs taraması başarısız"));
+        }
+    }
+
+    // Dispose sonrası (logger'lar da kapanmış olabilir) loglama atlanır; logger istisnası arka plan task'ını bozmaz.
+    private void SafeLog(Action<ILogger> log)
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return;
+        }
+
+        try
+        {
+            log(_logger);
+        }
+        catch (Exception)
+        {
+            // Loglama hatası taramayı etkilemez.
         }
     }
 

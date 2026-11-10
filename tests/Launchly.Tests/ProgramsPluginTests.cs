@@ -327,6 +327,96 @@ public sealed class ProgramsPluginTests : IDisposable
     }
 
     [Fact]
+    public async Task EmptyScan_DoesNotOverwriteNonEmptyCache()
+    {
+        await InitializedAsync(["Alpha", "Beta"]);
+        var storage = new Launchly.Core.Storage.JsonStorage<ProgramCache>(CachePath);
+        Assert.Equal(2, storage.Load().Programs.Count);
+
+        var second = CreatePlugin(new ProgramScanner([Path.Combine(_dir, "yok")], Resolver()));
+        await second.InitAsync(new PluginContext(_dir));
+        await second.RefreshTask;
+
+        Assert.Equal(2, second.Count);
+        Assert.Equal(["Alpha", "Beta"], storage.Load().Programs.Select(p => p.Name));
+    }
+
+    // Kapanmış (Dispose edilmiş) bir log sağlayıcısını taklit eder: Throw açıkken her çağrı ObjectDisposedException fırlatır.
+    private sealed class DisposableLogger : Microsoft.Extensions.Logging.ILogger
+    {
+        public volatile bool Throw;
+        public int ThrownCalls;
+
+        public IDisposable? BeginScope<TState>(TState state) where TState : notnull => null;
+
+        public bool IsEnabled(Microsoft.Extensions.Logging.LogLevel logLevel) => true;
+
+        public void Log<TState>(Microsoft.Extensions.Logging.LogLevel logLevel, Microsoft.Extensions.Logging.EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+        {
+            if (Throw)
+            {
+                Interlocked.Increment(ref ThrownCalls);
+                throw new ObjectDisposedException("logger");
+            }
+        }
+    }
+
+    // Tarama ilk kısayolun çözümünde bekletilir; test o arada logger'ı/eklentiyi kapatıp taramayı sürdürür.
+    private (ProgramsPlugin Plugin, ManualResetEventSlim Entered, ManualResetEventSlim Release) BlockedScan(DisposableLogger logger)
+    {
+        var root = Path.Combine(_dir, "start");
+        MakeLnk(root, "Alpha");
+        var entered = new ManualResetEventSlim();
+        var release = new ManualResetEventSlim();
+        var plugin = new ProgramsPlugin(logger, CachePath, new ProgramScanner([root], lnk =>
+        {
+            entered.Set();
+            release.Wait(TimeSpan.FromSeconds(10));
+            return Resolver()(lnk);
+        }), _ => { });
+        return (plugin, entered, release);
+    }
+
+    [Fact]
+    public async Task Scan_LoggerThrows_RefreshTaskDoesNotFault()
+    {
+        var logger = new DisposableLogger();
+        var (plugin, entered, release) = BlockedScan(logger);
+        using var e = entered;
+        using var r = release;
+        await plugin.InitAsync(new PluginContext(_dir));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+
+        logger.Throw = true;   // taramanın "bitti" logu fırlatır
+        release.Set();
+        await plugin.RefreshTask;
+
+        Assert.True(plugin.RefreshTask.IsCompletedSuccessfully);
+        Assert.Equal(1, plugin.Count);
+        Assert.True(Volatile.Read(ref logger.ThrownCalls) > 0);
+    }
+
+    [Fact]
+    public async Task Dispose_ThenScanCompletes_DoesNotLogOrFault()
+    {
+        var logger = new DisposableLogger();
+        var (plugin, entered, release) = BlockedScan(logger);
+        using var e = entered;
+        using var r = release;
+        await plugin.InitAsync(new PluginContext(_dir));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+
+        plugin.Dispose();
+        logger.Throw = true;   // uygulama kapanışında log sağlayıcısı da kapanır
+        release.Set();
+        await plugin.RefreshTask;
+
+        Assert.True(plugin.RefreshTask.IsCompletedSuccessfully);
+        Assert.Equal(0, Volatile.Read(ref logger.ThrownCalls));
+        Assert.Empty(new Launchly.Core.Storage.JsonStorage<ProgramCache>(CachePath).Load().Programs);   // iptal edilen tarama önbellek yazmadı
+    }
+
+    [Fact]
     public async Task Cache_RoundTrip_ReturnsSameEntriesWithoutScanning()
     {
         await InitializedAsync(["Alpha", "Beta"]);
