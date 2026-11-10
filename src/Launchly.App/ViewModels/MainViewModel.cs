@@ -1,29 +1,33 @@
-using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Launchly.Core.Plugins;
+using Launchly.Plugin;
+using Microsoft.Extensions.Logging;
 
 namespace Launchly.App.ViewModels;
 
 public sealed partial class MainViewModel : ObservableObject
 {
+    private readonly PluginManager _pluginManager;
+    private readonly ILogger<MainViewModel> _logger;
+    private readonly SynchronizationContext? _uiContext;
+    private int _generation;
+
     [ObservableProperty]
     private string _queryText = string.Empty;
 
     [ObservableProperty]
-    private int _selectedIndex;
+    private int _selectedIndex = -1;
 
-    public ObservableCollection<ResultItemViewModel> Results { get; } = new();
+    /// <summary>Sonuç listesi tek seferde (yeni liste nesnesiyle) değiştirilir; arayüz bir kez yenilenir.</summary>
+    [ObservableProperty]
+    private IReadOnlyList<ResultItemViewModel> _results = [];
 
-    public MainViewModel()
+    /// <summary>Oluşturan iş parçacığının (UI) bağlamı yakalanır; sonuçlar oraya taşınır. Bağlam yoksa doğrudan uygulanır.</summary>
+    public MainViewModel(PluginManager pluginManager, ILogger<MainViewModel> logger)
     {
-        // Sahte veri: gerçek sorgu çekirdeği 03-sorgu-cekirdegi'nde gelecek.
-        Results.Add(new("Visual Studio Code", "Application", "", "#2F80ED"));
-        Results.Add(new("Google Chrome", "Application", "", "#34A853"));
-        Results.Add(new("Notepad", "Application", "", "#6B7280"));
-        Results.Add(new("File Explorer", "Application", "", "#D98E1F"));
-        Results.Add(new("Windows Terminal", "Application", "", "#374151"));
-        Results.Add(new("Calculator", "Application", "", "#8B5CF6"));
-        Results.Add(new("Settings", "Application", "", "#0EA5E9"));
-        Results.Add(new("Task Manager", "Application", "", "#EF4444"));
+        _pluginManager = pluginManager;
+        _logger = logger;
+        _uiContext = SynchronizationContext.Current;
     }
 
     /// <summary>Seçimi <paramref name="delta"/> kadar kaydırır; uçlarda başa/sona sarar.</summary>
@@ -51,10 +55,112 @@ public sealed partial class MainViewModel : ObservableObject
         return true;
     }
 
-    /// <summary>Pencere her açıldığında çağrılır: kutuyu temizler, seçimi başa alır.</summary>
+    /// <summary>
+    /// Seçili sonucun eylemini çalıştırır. Dönüş: pencere gizlenmeli mi (eylem true döndürdüyse).
+    /// Seçim yoksa, eylem tanımsızsa ya da eylem hata verirse false.
+    /// </summary>
+    public async Task<bool> ExecuteSelectedAsync()
+    {
+        var action = Selected?.Result.Action;
+        if (action is null)
+        {
+            return false;
+        }
+
+        try
+        {
+            return await action();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Sonuç eylemi başarısız: {Title}", Selected?.Title);
+            return false;
+        }
+    }
+
+    /// <summary>Tab: seçili sonucun <see cref="Result.AutoComplete"/> metnini arama kutusuna yazar. Yazıldıysa true.</summary>
+    public bool AutoCompleteSelected()
+    {
+        var text = Selected?.Result.AutoComplete;
+        if (string.IsNullOrEmpty(text))
+        {
+            return false;
+        }
+
+        QueryText = text;
+        return true;
+    }
+
+    /// <summary>Pencere her açıldığında çağrılır: kutuyu ve listeyi temizler.</summary>
     public void Reset()
     {
         QueryText = string.Empty;
-        SelectedIndex = Results.Count > 0 ? 0 : -1;
+        ClearResults();
+    }
+
+    private ResultItemViewModel? Selected =>
+        SelectedIndex >= 0 && SelectedIndex < Results.Count ? Results[SelectedIndex] : null;
+
+    partial void OnQueryTextChanged(string value) => StartQuery(value);
+
+    private void StartQuery(string text)
+    {
+        var generation = Interlocked.Increment(ref _generation);
+
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            _pluginManager.CancelCurrent();
+            ApplyResults([]);
+            return;
+        }
+
+        _ = RunQueryAsync(text, generation);
+    }
+
+    private void ClearResults()
+    {
+        Interlocked.Increment(ref _generation);
+        _pluginManager.CancelCurrent();
+        ApplyResults([]);
+    }
+
+    private async Task RunQueryAsync(string text, int generation)
+    {
+        try
+        {
+            await _pluginManager.QueryAsync(text, results => PostResults(generation, results));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Sorgu çalıştırılamadı: {Query}", text);
+        }
+    }
+
+    // Arka plan iş parçacığından çağrılır. Bir sonraki sorgu başlamışsa (nesil değişmişse) sonuç atılır:
+    // Post ile UI kuyruğuna girmiş eski bir yayın bile ekrana düşmez.
+    private void PostResults(int generation, IReadOnlyList<Result> results)
+    {
+        void Apply()
+        {
+            if (generation == Volatile.Read(ref _generation))
+            {
+                ApplyResults(results);
+            }
+        }
+
+        if (_uiContext is null)
+        {
+            Apply();
+        }
+        else
+        {
+            _uiContext.Post(_ => Apply(), null);
+        }
+    }
+
+    private void ApplyResults(IReadOnlyList<Result> results)
+    {
+        Results = results.Select(r => new ResultItemViewModel(r)).ToList();
+        SelectedIndex = results.Count > 0 ? 0 : -1;
     }
 }

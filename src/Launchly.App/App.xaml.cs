@@ -7,6 +7,7 @@ using Launchly.App.Interop;
 using Launchly.App.Tray;
 using Launchly.App.ViewModels;
 using Launchly.Core;
+using Launchly.Core.Plugins;
 using Launchly.Core.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -49,6 +50,9 @@ public partial class App : Application
         // Ayarlar ilk çözümlemede yüklenir; dosya yoksa oluşturulur.
         var settings = Services.GetRequiredService<Settings>();
         Log.Information("Launchly başladı. Ayar dosyası: {Path}, kısayol: {Hotkey}", DataLocation.SettingsPath, settings.Hotkey);
+
+        // Eklentiler pencere açılmadan başlatılır (şimdilik kayıtlı eklenti yok; 04-06 ekler).
+        await Services.GetRequiredService<PluginManager>().InitializeAsync();
 
         var window = Services.GetRequiredService<MainWindow>();
         MainWindow = window;
@@ -98,6 +102,8 @@ public partial class App : Application
             DataLocation.SettingsPath,
             sp.GetRequiredService<ILogger<JsonStorage<Settings>>>()));
         services.AddSingleton(sp => sp.GetRequiredService<JsonStorage<Settings>>().Load());
+        // Dahili eklentiler (IPlugin) 04-06 görevlerinde buraya AddSingleton<IPlugin, ...>() ile eklenir.
+        services.AddSingleton<PluginManager>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
     }

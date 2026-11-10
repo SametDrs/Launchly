@@ -18,7 +18,9 @@ public partial class MainWindow : Window
         PreviewKeyDown += OnPreviewKeyDown;
         viewModel.PropertyChanged += (_, e) =>
         {
-            if (e.PropertyName == nameof(MainViewModel.SelectedIndex) && viewModel.SelectedIndex >= 0)
+            if (e.PropertyName == nameof(MainViewModel.SelectedIndex)
+                && viewModel.SelectedIndex >= 0
+                && viewModel.SelectedIndex < ResultList.Items.Count)
             {
                 ResultList.ScrollIntoView(ResultList.Items[viewModel.SelectedIndex]);
             }
@@ -90,9 +92,26 @@ public partial class MainWindow : Window
                 e.Handled = true;
                 break;
             case Key.Enter:
-                // Çalıştırma 03-sorgu-cekirdegi/04-programs görevlerinde; şimdilik boş.
+                _ = ExecuteSelectedAsync();
                 e.Handled = true;
                 break;
+            case Key.Tab:
+                if (_viewModel.AutoCompleteSelected())
+                {
+                    SearchBox.CaretIndex = SearchBox.Text.Length;
+                }
+
+                e.Handled = true;
+                break;
+        }
+    }
+
+    private async Task ExecuteSelectedAsync()
+    {
+        // Eylem başarısız olursa ViewModel false döner (loglanır); pencere açık kalır.
+        if (await _viewModel.ExecuteSelectedAsync())
+        {
+            HideLauncher();
         }
     }
 

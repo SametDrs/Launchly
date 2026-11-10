@@ -18,6 +18,9 @@ public sealed class Settings
     /// <summary>Gösterilecek en fazla sonuç sayısı.</summary>
     public int MaxResults { get; set; } = 8;
 
+    /// <summary>Kullanıcının kapattığı eklentilerin kimlikleri (<c>PluginMetadata.Id</c>).</summary>
+    public List<string> DisabledPlugins { get; set; } = [];
+
     /// <summary>Windows açılışında başlat.</summary>
     public bool StartOnSystemStartup { get; set; }
 
