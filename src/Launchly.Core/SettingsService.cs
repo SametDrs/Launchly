@@ -76,7 +76,7 @@ public sealed class SettingsService
     {
         if (!HotkeyParser.TryParse(draft.Hotkey, out _))
         {
-            error = $"\"{draft.Hotkey}\" geçerli bir kısayol değil (en az bir değiştirici ve bir tuş gerekir).";
+            error = $"\"{draft.Hotkey}\" geçerli bir kısayol değil (Ctrl, Alt ya da Win'den en az biri ve bir tuş gerekir).";
             return false;
         }
 
@@ -111,16 +111,21 @@ public sealed class SettingsService
         var hotkeyChanged = !string.Equals(draft.Hotkey, oldHotkey, StringComparison.OrdinalIgnoreCase);
 
         // Metin değişmese de mevcut kayıt başarısızsa (ör. başlangıçta çakışma) yeniden denenir.
-        var needsRegister = hotkeyChanged || !_hotkey.IsRegistered;
-        if (needsRegister && !_hotkey.TryRegister(draft.Hotkey, out var hotkeyError))
+        // Kısayol değişmediyse yeniden kayıt yalnızca denenir; başarısızlığı diğer ayarları engellemez (uyarı döner).
+        string? hotkeyWarning = null;
+        if (hotkeyChanged)
         {
-            // Eski kayıt kaydedici tarafından bırakılmış olabilir: eskisini geri yükle.
-            if (hotkeyChanged)
+            if (!_hotkey.TryRegister(draft.Hotkey, out var hotkeyError))
             {
+                // Eski kayıt kaydedici tarafından bırakılmış olabilir: eskisini geri yükle.
                 RestoreHotkey(oldHotkey);
+                return new SettingsApplyResult(false, hotkeyError ?? "Kısayol kaydedilemedi.");
             }
-
-            return new SettingsApplyResult(false, hotkeyError ?? "Kısayol kaydedilemedi.");
+        }
+        else if (!_hotkey.IsRegistered && !_hotkey.TryRegister(draft.Hotkey, out var retryError))
+        {
+            hotkeyWarning = retryError ?? "Kısayol kaydedilemedi.";
+            _logger.LogWarning("Kısayol yeniden kaydedilemedi: {Error}", hotkeyWarning);
         }
 
         if (draft.StartOnSystemStartup != _live.StartOnSystemStartup)
@@ -161,7 +166,7 @@ public sealed class SettingsService
 
         _plugins.RefreshKeywords();
         Applied?.Invoke(_live);
-        return new SettingsApplyResult(true, null);
+        return new SettingsApplyResult(true, hotkeyWarning is null ? null : "Ayarlar kaydedildi ancak kısayol kaydedilemedi: " + hotkeyWarning);
     }
 
     private void RestoreHotkey(string hotkey)

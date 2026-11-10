@@ -155,7 +155,8 @@ public partial class App : Application
         services.AddSingleton(sp => new JsonStorage<Settings>(
             DataLocation.SettingsPath,
             sp.GetRequiredService<ILogger<JsonStorage<Settings>>>()));
-        services.AddSingleton(sp => sp.GetRequiredService<JsonStorage<Settings>>().Load().Normalize());
+        services.AddSingleton(sp => sp.GetRequiredService<JsonStorage<Settings>>().Load()
+            .Normalize(sp.GetRequiredService<ILogger<Settings>>()));
         // Dahili eklentiler (IPlugin); 05-06 görevleri buraya AddSingleton<IPlugin, ...>() ile ekler.
         services.AddSingleton<IPlugin, ProgramsPlugin>();
         services.AddSingleton<IUrlOpener, ShellUrlOpener>();

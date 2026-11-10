@@ -16,7 +16,7 @@
         <ScrollViewer Grid.Row="0" VerticalScrollBarVisibility="Auto">
             <StackPanel>
                 <TextBlock Text="Kısayol" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" />
-                <TextBlock Text="Kutuya tıklayıp yeni tuş birleşimine basın (en az bir değiştirici: Ctrl, Alt, Shift, Win)."
+                <TextBlock Text="Kutuya tıklayıp yeni tuş birleşimine basın (Ctrl, Alt ya da Win'den en az biri gerekir)."
                            Foreground="{StaticResource SubTextBrush}" FontSize="12" Margin="0,2,0,8" />
                 <TextBox x:Name="HotkeyBox" Width="220" HorizontalAlignment="Left" IsReadOnly="True"
                          Style="{StaticResource FieldTextBoxStyle}" Text="{Binding Hotkey, Mode=OneWay}"

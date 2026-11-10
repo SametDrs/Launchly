@@ -11,7 +11,9 @@ public sealed partial class MainViewModel : ObservableObject
     private readonly ILogger<MainViewModel> _logger;
     private readonly SynchronizationContext? _uiContext;
     private readonly object _generationGate = new();
-    private int _generation;
+    private int _generation;      // yalnızca _generationGate altında okunur/yazılır
+    private int _executing;
+    private CancellationTokenSource? _pendingEnter;
 
     // Güncel neslin sonucu listeye uygulanınca (ya da nesil boşa çıkınca) tamamlanır; Enter bunu bekler.
     private TaskCompletionSource _applied = CompletedSignal();
@@ -65,24 +67,84 @@ public sealed partial class MainViewModel : ObservableObject
     /// </summary>
     public async Task<bool> ExecuteSelectedAsync()
     {
-        // Son sorgunun sonuçları henüz gelmediyse eski listedeki öğe çalıştırılmaz; sonuç gelene kadar beklenir.
-        // Bekleme sırasında yeni sorgu başlarsa (sinyal tamamlanır) güncel sinyal yeniden beklenir.
-        while (true)
+        // Yeniden giriş koruması: devam eden (bekleyen ya da çalışan) bir yürütme varken yeni Enter yok sayılır.
+        if (Interlocked.CompareExchange(ref _executing, 1, 0) != 0)
         {
-            Task pending;
-            lock (_generationGate)
-            {
-                pending = _applied.Task;
-            }
-
-            if (pending.IsCompleted)
-            {
-                break;
-            }
-
-            await pending;
+            return false;
         }
 
+        try
+        {
+            if (!await WaitForCurrentResultsAsync())
+            {
+                return false;
+            }
+
+            return await RunSelectedAsync();
+        }
+        finally
+        {
+            Volatile.Write(ref _executing, 0);
+        }
+    }
+
+    /// <summary>Bekleyen Enter'ı iptal eder (Esc, pencere gizleme). Çalışmaya başlamış eylem durdurulmaz.</summary>
+    public void CancelPendingExecute()
+    {
+        CancellationTokenSource? cts;
+        lock (_generationGate)
+        {
+            cts = _pendingEnter;
+            _pendingEnter = null;
+        }
+
+        cts?.Cancel();
+    }
+
+    // Enter'ın bastığı andaki neslin sonucu uygulanana kadar bekler. Nesil değişirse (yeni sorgu, Reset) ya da
+    // iptal edilirse (Esc, gizleme) false döner: bekleyen Enter sonraki nesillere geçmez.
+    private async Task<bool> WaitForCurrentResultsAsync()
+    {
+        Task pending;
+        int generation;
+        using var cts = new CancellationTokenSource();
+        lock (_generationGate)
+        {
+            pending = _applied.Task;
+            generation = _generation;
+            if (!pending.IsCompleted)
+            {
+                _pendingEnter = cts;
+            }
+        }
+
+        try
+        {
+            if (!pending.IsCompleted)
+            {
+                await pending.WaitAsync(cts.Token);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            return false;
+        }
+        finally
+        {
+            lock (_generationGate)
+            {
+                if (ReferenceEquals(_pendingEnter, cts))
+                {
+                    _pendingEnter = null;
+                }
+            }
+        }
+
+        return IsCurrent(generation);
+    }
+
+    private async Task<bool> RunSelectedAsync()
+    {
         var action = Selected?.Result.Action;
         if (action is null)
         {
@@ -136,16 +198,28 @@ public sealed partial class MainViewModel : ObservableObject
     private int BeginGeneration()
     {
         TaskCompletionSource old;
+        CancellationTokenSource? pendingEnter;
         int generation;
         lock (_generationGate)
         {
             old = _applied;
             _applied = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            generation = Interlocked.Increment(ref _generation);
+            generation = ++_generation;
+            pendingEnter = _pendingEnter;
+            _pendingEnter = null;
         }
 
+        pendingEnter?.Cancel();
         old.TrySetResult();
         return generation;
+    }
+
+    private bool IsCurrent(int generation)
+    {
+        lock (_generationGate)
+        {
+            return generation == _generation;
+        }
     }
 
     private void CompleteGeneration(int generation)
@@ -192,9 +266,14 @@ public sealed partial class MainViewModel : ObservableObject
 
     private async Task RunQueryAsync(string text, int generation)
     {
+        var published = 0;
         try
         {
-            await _pluginManager.QueryAsync(text, results => PostResults(generation, results));
+            await _pluginManager.QueryAsync(text, results =>
+            {
+                Volatile.Write(ref published, 1);
+                PostResults(generation, results);
+            });
         }
         catch (Exception ex)
         {
@@ -202,8 +281,12 @@ public sealed partial class MainViewModel : ObservableObject
         }
         finally
         {
-            // Yayın yapılmadan bitmiş (iptal/hata) olsa da Enter'ı bekletme; Post sırası yayından sonradır.
-            Post(() => CompleteGeneration(generation));
+            // Yayın yapıldıysa tamamlama, sonucu uygulayan callback'tedir (PostResults); sıraya güvenilmez.
+            // Yalnızca hiç yayın yapılmadan biten (iptal/hata/sonuçsuz) sorguda burada tamamlanır.
+            if (Volatile.Read(ref published) == 0)
+            {
+                Post(() => CompleteGeneration(generation));
+            }
         }
     }
 
@@ -213,7 +296,7 @@ public sealed partial class MainViewModel : ObservableObject
     {
         Post(() =>
         {
-            if (generation == Volatile.Read(ref _generation))
+            if (IsCurrent(generation))
             {
                 ApplyResults(results);
                 CompleteGeneration(generation);

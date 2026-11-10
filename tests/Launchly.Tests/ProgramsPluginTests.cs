@@ -165,6 +165,56 @@ public sealed class ProgramsPluginTests : IDisposable
     }
 
     [Fact]
+    public async Task Dispose_IsIdempotent_AndDoesNotBlock()
+    {
+        var root = Path.Combine(_dir, "start");
+        MakeLnk(root, "Alpha");
+        using var entered = new ManualResetEventSlim();
+        using var release = new ManualResetEventSlim();
+        var plugin = CreatePlugin(new ProgramScanner([root], lnk =>
+        {
+            entered.Set();
+            release.Wait(TimeSpan.FromSeconds(10));
+            return Resolver()(lnk);
+        }));
+        await plugin.InitAsync(new PluginContext(_dir));
+        Assert.True(entered.Wait(TimeSpan.FromSeconds(10)));
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        plugin.Dispose();                 // tarama sürerken bile beklemeden döner
+        plugin.Dispose();                 // ikinci çağrı sessizce döner
+        Assert.True(sw.Elapsed < TimeSpan.FromSeconds(1));
+
+        release.Set();
+        await plugin.RefreshTask;
+        Assert.Equal(0, plugin.Count);
+    }
+
+    [Fact]
+    public void Scanner_UnexpectedResolverException_SkipsOnlyThatShortcut()
+    {
+        var root = Path.Combine(_dir, "start");
+        MakeLnk(root, "Good");
+        MakeLnk(root, "Bad");
+        var inner = Resolver();
+
+        var list = new ProgramScanner([root], lnk =>
+            Path.GetFileNameWithoutExtension(lnk) == "Bad" ? throw new InvalidCastException("com") : inner(lnk)).Scan();
+
+        Assert.Equal(["Good"], list.Select(e => e.Name));
+    }
+
+    [Fact]
+    public void Scanner_ResolverCancellation_Propagates()
+    {
+        var root = Path.Combine(_dir, "start");
+        MakeLnk(root, "Good");
+
+        Assert.Throws<OperationCanceledException>(() =>
+            new ProgramScanner([root], _ => throw new OperationCanceledException()).Scan());
+    }
+
+    [Fact]
     public void Scanner_MissingRoot_IsIgnored()
     {
         var list = new ProgramScanner([Path.Combine(_dir, "yok")], Resolver()).Scan();

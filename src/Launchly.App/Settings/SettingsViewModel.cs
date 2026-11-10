@@ -122,8 +122,8 @@ public sealed partial class SettingsViewModel : ObservableObject
         draft.SearchSources = Sources.Select(s => s.ToSource()).ToList();
 
         var result = _service.Apply(draft);
-        IsError = !result.Success;
-        Message = result.Success ? "Ayarlar uygulandı." : result.Error ?? "Ayarlar uygulanamadı.";
+        IsError = !result.Success || result.Error is not null;   // başarıyla dönen Error bir uyarıdır
+        Message = result.Success ? result.Error ?? "Ayarlar uygulandı." : result.Error ?? "Ayarlar uygulanamadı.";
         return result.Success;
     }
 }

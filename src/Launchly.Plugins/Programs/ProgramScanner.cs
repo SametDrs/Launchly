@@ -84,7 +84,7 @@ internal sealed class ProgramScanner
             {
                 target = _resolveTarget(file);
             }
-            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+            catch (Exception ex) when (ex is not OperationCanceledException)
             {
                 _logger.LogWarning(ex, "Kısayol çözülemedi, atlandı: {Path}", file);
                 continue;

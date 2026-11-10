@@ -239,10 +239,39 @@ public sealed class SettingsServiceTests : IDisposable
         _hotkey.Taken.Add("Alt+Space");
         _hotkey.TryRegister("Alt+Space", out _);
 
-        var result = _service.Apply(_service.CreateDraft());
+        var draft = _service.CreateDraft();
+        draft.HideOnFocusLost = !_live.HideOnFocusLost;
+        var expected = draft.HideOnFocusLost;
 
-        Assert.False(result.Success);
+        var result = _service.Apply(draft);
+
+        // Kısayol değişmedi: diğer ayarlar uygulanır ve kaydedilir; başarısız yeniden kayıt yalnızca uyarıdır.
+        Assert.True(result.Success);
         Assert.Contains("kullanımda", result.Error);
+        Assert.Equal(expected, _live.HideOnFocusLost);
+        Assert.Equal(expected, _storage.Load().HideOnFocusLost);
+    }
+
+    [Fact]
+    public void Normalize_InvalidHotkey_FallsBackToDefault()
+    {
+        foreach (var bad in new[] { "Shift+F12", "A", "", "Alt+", "Ctrl+Alt"})
+        {
+            var s = new Settings { Hotkey = bad }.Normalize();
+            Assert.Equal("Alt+Space", s.Hotkey);
+        }
+
+        Assert.Equal("Ctrl+K", new Settings { Hotkey = "Ctrl+K" }.Normalize().Hotkey);
+    }
+
+    [Fact]
+    public void Validate_InvalidHotkey_ErrorMentionsRequiredModifiers()
+    {
+        var draft = _service.CreateDraft();
+        draft.Hotkey = "Shift+F12";
+
+        Assert.False(SettingsService.TryValidate(draft, out var error));
+        Assert.Contains("Ctrl, Alt ya da Win", error);
     }
 
     [Fact]

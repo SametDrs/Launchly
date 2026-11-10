@@ -238,6 +238,97 @@ public class MainViewModelTests
         Assert.Equal(0, ran);
     }
 
+    private static FakePlugin SlowPlugin(List<string> ran, int delayMs = 200) => new("p", ["*"], async (q, _) =>
+    {
+        await Task.Delay(q.Search.StartsWith("slow") ? delayMs : 0);
+        var title = "res-" + q.Search;
+        return [R(title, 1, () => { ran.Add(title); return Task.FromResult(true); })];
+    });
+
+    [Fact]
+    public async Task PendingEnter_CancelledByCancelPendingExecute_RunsNothing()
+    {
+        var ran = new List<string>();
+        var (vm, manager) = await CreateAsync(SlowPlugin(ran));
+        using var m = manager;
+        vm.QueryText = "slow";
+
+        var enter = vm.ExecuteSelectedAsync();
+        vm.CancelPendingExecute();                      // Esc / pencere gizleme
+
+        Assert.False(await enter);
+        await WaitUntilAsync(() => vm.Results.Count == 1, "sonuç");
+        await Task.Delay(50);
+        Assert.Empty(ran);
+    }
+
+    [Fact]
+    public async Task PendingEnter_NewQuery_CancelsIt_AndDoesNotRunLaterGeneration()
+    {
+        var ran = new List<string>();
+        var (vm, manager) = await CreateAsync(SlowPlugin(ran));
+        using var m = manager;
+        vm.QueryText = "slow1";
+
+        var enter = vm.ExecuteSelectedAsync();
+        vm.QueryText = "slow2";                         // yeni nesil
+
+        Assert.False(await enter);
+        await WaitUntilAsync(() => Titles(vm).SequenceEqual(["res-slow2"]), "yeni sonuç");
+        Assert.Empty(ran);
+    }
+
+    [Fact]
+    public async Task PendingEnter_Reset_CancelsIt()
+    {
+        var ran = new List<string>();
+        var (vm, manager) = await CreateAsync(SlowPlugin(ran));
+        using var m = manager;
+        vm.QueryText = "slow";
+
+        var enter = vm.ExecuteSelectedAsync();
+        vm.Reset();
+
+        Assert.False(await enter);
+        Assert.Empty(ran);
+    }
+
+    [Fact]
+    public async Task DoubleEnter_WhileQueryPending_RunsActionOnce()
+    {
+        var ran = new List<string>();
+        var (vm, manager) = await CreateAsync(SlowPlugin(ran));
+        using var m = manager;
+        vm.QueryText = "slow";
+
+        var first = vm.ExecuteSelectedAsync();
+        var second = vm.ExecuteSelectedAsync();
+
+        Assert.False(await second);                     // devam eden yürütme varken yok sayıldı
+        Assert.True(await first);
+        Assert.Equal(["res-slow"], ran);
+    }
+
+    [Fact]
+    public async Task ExecuteSelected_WhileActionRunning_IgnoresSecondEnter()
+    {
+        var gate = new TaskCompletionSource();
+        var ran = 0;
+        var plugin = new FakePlugin("p", ["*"], (_, _) => Results(
+            R("a", 1, async () => { ran++; await gate.Task; return true; })));
+        var (vm, manager) = await CreateAsync(plugin);
+        using var m = manager;
+        vm.QueryText = "q";
+        await WaitUntilAsync(() => vm.Results.Count == 1, "sonuç");
+
+        var first = vm.ExecuteSelectedAsync();
+        Assert.False(await vm.ExecuteSelectedAsync());
+        gate.SetResult();
+
+        Assert.True(await first);
+        Assert.Equal(1, ran);
+    }
+
     [Fact]
     public void ResultItem_WithIconImage_HasNoInitial()
     {

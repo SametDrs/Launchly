@@ -101,7 +101,7 @@ public partial class SettingsWindow : Window
         if (!_viewModel.TryCaptureHotkey(mods, vk))
         {
             _viewModel.IsError = true;
-            _viewModel.Message = "Bu tuş birleşimi kısayol olamaz (en az bir değiştirici ve desteklenen bir tuş gerekir).";
+            _viewModel.Message = "Bu tuş birleşimi kısayol olamaz (Ctrl, Alt ya da Win'den en az biri ve desteklenen bir tuş gerekir).";
             return;
         }
 

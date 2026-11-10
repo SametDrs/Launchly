@@ -1,3 +1,5 @@
+using Microsoft.Extensions.Logging;
+
 namespace Launchly.Core;
 
 /// <summary>
@@ -37,7 +39,7 @@ public sealed class Settings
     /// Elle düzenlenmiş/bozuk JSON'dan gelen null değerleri düzeltir: null liste boş (kaynaklarda varsayılan) olur,
     /// listelerdeki null öğeler atılır, null metinler varsayılana/boşa döner. Yüklemeden hemen sonra çağrılır.
     /// </summary>
-    public Settings Normalize()
+    public Settings Normalize(ILogger? logger = null)
     {
         DisabledPlugins = (DisabledPlugins ?? []).Where(id => id is not null).ToList();
         SearchSources = SearchSources is null
@@ -48,8 +50,10 @@ public sealed class Settings
             source.Normalize();
         }
 
-        if (string.IsNullOrWhiteSpace(Hotkey))
+        if (!HotkeyParser.TryParse(Hotkey, out _))
         {
+            // Boş, bozuk ya da eski sürümden kalma geçersiz kısayol (ör. yalnızca Shift): varsayılana dön.
+            logger?.LogWarning("Geçersiz kısayol \"{Hotkey}\", varsayılana (Alt+Space) dönüldü", Hotkey);
             Hotkey = "Alt+Space";
         }
 

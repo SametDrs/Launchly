@@ -76,6 +76,7 @@ public partial class MainWindow : Window
 
     public void HideLauncher()
     {
+        _viewModel.CancelPendingExecute();
         if (IsVisible)
         {
             Hide();

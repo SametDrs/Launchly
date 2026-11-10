@@ -21,7 +21,9 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
     private readonly CancellationTokenSource _shutdown = new();
     private readonly IconLoader _icons = new();
     private readonly Action<string> _launch;
+    private readonly object _saveGate = new();
     private volatile ProgramEntry[] _entries = [];
+    private int _disposed;
 
     /// <summary>DI için: gerçek Start Menu klasörleri ve <c>%AppData%\Launchly\cache\programs.json</c>.</summary>
     public ProgramsPlugin(ILogger<ProgramsPlugin> logger, Settings settings)
@@ -76,17 +78,20 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
     /// <summary>Uygulama kapanırken arka plan taramasını iptal eder; yarım tarama önbelleğe yazılmaz.</summary>
     public void Dispose()
     {
-        _shutdown.Cancel();
-        try
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
         {
-            RefreshTask.Wait(TimeSpan.FromSeconds(2));
-        }
-        catch (AggregateException)
-        {
-            // Tarama hatası RefreshCore içinde loglandı.
+            return;
         }
 
-        _shutdown.Dispose();
+        _shutdown.Cancel();
+
+        // UI'ı taramanın bitmesini bekleyerek bloklamayız. Yalnızca sürmekte olan (kısa) önbellek yazımı bitsin diye
+        // kilitten geçilir; bundan sonra başlayan her yazım iptali görüp vazgeçer.
+        lock (_saveGate)
+        {
+        }
+
+        // _shutdown Dispose edilmez: tarama iş parçacığı token'ı hâlâ kullanıyor olabilir (yalnızca bellek, yönetilmeyen kaynak yok).
     }
 
     public Task<IReadOnlyList<Result>> QueryAsync(Query query, CancellationToken cancellationToken)
@@ -135,9 +140,14 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
         try
         {
             var scanned = _scanner.Scan(cancellationToken);
-            cancellationToken.ThrowIfCancellationRequested();
-            _entries = scanned.ToArray();
-            _cacheStorage.Save(new ProgramCache { ScannedAtUtc = DateTime.UtcNow, Programs = scanned });
+            lock (_saveGate)
+            {
+                // İptal edilmiş (Dispose) tarama ne listeyi ne önbelleği yazar.
+                cancellationToken.ThrowIfCancellationRequested();
+                _entries = scanned.ToArray();
+                _cacheStorage.Save(new ProgramCache { ScannedAtUtc = DateTime.UtcNow, Programs = scanned });
+            }
+
             _logger.LogInformation("Programs taraması bitti: {Count} uygulama", scanned.Count);
         }
         catch (OperationCanceledException)
