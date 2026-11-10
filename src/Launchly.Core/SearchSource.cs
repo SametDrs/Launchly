@@ -20,6 +20,36 @@ public sealed class SearchSource
 
     public bool Enabled { get; set; } = true;
 
+    public SearchSource Clone() => (SearchSource)MemberwiseClone();
+
+    /// <summary>Kaynağı doğrular: başlık, tek kelimelik anahtar kelime ve http(s) + <c>{q}</c> içeren şablon.</summary>
+    public bool TryValidate(out string? error)
+    {
+        if (string.IsNullOrWhiteSpace(Title))
+        {
+            error = "Başlık boş olamaz.";
+        }
+        else if (string.IsNullOrWhiteSpace(ActionKeyword) || ActionKeyword.Any(char.IsWhiteSpace) || ActionKeyword.Trim() == "*")
+        {
+            error = "Anahtar kelime boş olamaz, boşluk içeremez ve \"*\" olamaz.";
+        }
+        else if (!UrlTemplate.Contains(Placeholder, StringComparison.Ordinal))
+        {
+            error = $"Adres şablonu {Placeholder} içermeli (ör. https://site.com/search?q={Placeholder}).";
+        }
+        else if (!Uri.TryCreate(UrlTemplate.Replace(Placeholder, "x", StringComparison.Ordinal), UriKind.Absolute, out var uri)
+                 || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
+        {
+            error = "Adres şablonu http:// veya https:// ile başlayan geçerli bir adres olmalı.";
+        }
+        else
+        {
+            error = null;
+        }
+
+        return error is null;
+    }
+
     /// <summary>Varsayılan kaynaklar (ayarda hiç yoksa kullanılır).</summary>
     public static List<SearchSource> CreateDefaults() =>
     [

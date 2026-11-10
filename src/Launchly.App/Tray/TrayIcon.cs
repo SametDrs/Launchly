@@ -8,10 +8,11 @@ public sealed class TrayIcon : IDisposable
 {
     private readonly NotifyIcon _icon;
 
-    public TrayIcon(Action toggle, Action exit)
+    public TrayIcon(Action toggle, Action settings, Action exit)
     {
         var menu = new ContextMenuStrip();
-        menu.Items.Add("Exit", null, (_, _) => exit());
+        menu.Items.Add("Settings", null, (_, _) => settings());
+        menu.Items.Add("Çıkış", null, (_, _) => exit());
 
         _icon = new NotifyIcon
         {

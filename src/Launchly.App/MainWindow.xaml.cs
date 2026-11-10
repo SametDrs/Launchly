@@ -1,20 +1,34 @@
 using System.Windows;
 using System.Windows.Input;
 using Launchly.App.ViewModels;
+using Launchly.Core;
 
 namespace Launchly.App;
 
 public partial class MainWindow : Window
 {
     private readonly MainViewModel _viewModel;
+    private readonly Core.Settings _settings;
 
-    public MainWindow(MainViewModel viewModel)
+    public MainWindow(MainViewModel viewModel, Core.Settings settings)
     {
         _viewModel = viewModel;
+        _settings = settings;
         DataContext = viewModel;
         InitializeComponent();
 
-        Deactivated += (_, _) => HideLauncher();
+        Deactivated += (_, _) =>
+        {
+            if (_settings.HideOnFocusLost)
+            {
+                HideLauncher();
+            }
+        };
+        SettingsButton.Click += (_, _) =>
+        {
+            HideLauncher();
+            SettingsRequested?.Invoke();
+        };
         PreviewKeyDown += OnPreviewKeyDown;
         viewModel.PropertyChanged += (_, e) =>
         {
@@ -26,6 +40,9 @@ public partial class MainWindow : Window
             }
         };
     }
+
+    /// <summary>Alt çubuktaki Settings düğmesine basılınca.</summary>
+    public event Action? SettingsRequested;
 
     public bool IsLauncherVisible => IsVisible;
 

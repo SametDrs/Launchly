@@ -24,6 +24,9 @@ public sealed class Settings
     /// <summary>Web arama kaynakları (WebSearch eklentisi). Ayarda yoksa varsayılanlar gelir.</summary>
     public List<SearchSource> SearchSources { get; set; } = SearchSource.CreateDefaults();
 
+    /// <summary>Pencere odağı kaybedince (başka pencereye tıklanınca) gizlensin mi.</summary>
+    public bool HideOnFocusLost { get; set; } = true;
+
     /// <summary>Windows açılışında başlat.</summary>
     public bool StartOnSystemStartup { get; set; }
 

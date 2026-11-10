@@ -64,6 +64,18 @@ public sealed class PluginManager : IDisposable
         }
     }
 
+    /// <summary>
+    /// Anahtar kelime dizinini eklentilerin güncel <c>Metadata</c>'sından yeniden kurar (ör. ayar penceresinde
+    /// web kaynakları değişince). Başlatması başarısız olan eklentiler dışarıda kalır.
+    /// </summary>
+    public void RefreshKeywords()
+    {
+        lock (_gate)
+        {
+            RebuildIndex(_plugins.Where(p => !_failed.Contains(p.Metadata.Id)));
+        }
+    }
+
     /// <summary>Kutu boşken çalışacak etkin bir eklenti var mı (ana ekran listesi).</summary>
     public bool HasEmptyQueryPlugins
     {

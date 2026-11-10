@@ -4,6 +4,7 @@ using System.Windows.Interop;
 using System.Windows.Threading;
 using Launchly.App.Hotkey;
 using Launchly.App.Interop;
+using Launchly.App.SettingsUi;
 using Launchly.App.Tray;
 using Launchly.App.ViewModels;
 using Launchly.Core;
@@ -28,6 +29,8 @@ public partial class App : Application
     private IHost? _host;
     private HotkeyManager? _hotkey;
     private TrayIcon? _tray;
+    private SingleInstance? _singleInstance;
+    private SettingsWindow? _settingsWindow;
 
     public IServiceProvider Services =>
         _host?.Services ?? throw new InvalidOperationException("Host henüz başlatılmadı.");
@@ -35,6 +38,17 @@ public partial class App : Application
     protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
+
+        // Tek örnek: ikinci başlatma çalışan pencereyi açar ve kapanır.
+        _singleInstance = new SingleInstance("Launchly");
+        if (!_singleInstance.IsFirst)
+        {
+            _singleInstance.SignalFirst();
+            _singleInstance.Dispose();
+            _singleInstance = null;
+            Shutdown();
+            return;
+        }
 
         Log.Logger = new LoggerConfiguration()
             .MinimumLevel.Information()
@@ -69,10 +83,41 @@ public partial class App : Application
         var applied = WindowBackdrop.Apply(window, settings.Backdrop);
         Log.Information("Arka plan: istenen {Requested}, uygulanan {Applied}", settings.Backdrop, applied);
 
-        _tray = new TrayIcon(window.ShowLauncher, Shutdown);
-
         _hotkey = new HotkeyManager();
         _hotkey.Pressed += window.ToggleLauncher;
+
+        var settingsService = new SettingsService(
+            settings,
+            Services.GetRequiredService<JsonStorage<Settings>>(),
+            new WindowHotkeyRegistrar(_hotkey, hwnd),
+            new RegistryAutoStart(),
+            Services.GetRequiredService<PluginManager>(),
+            Services.GetRequiredService<ILogger<SettingsService>>());
+        settingsService.Applied += s => WindowBackdrop.Apply(window, s.Backdrop);
+
+        void OpenSettings()
+        {
+            _settingsWindow ??= new SettingsWindow(new SettingsViewModel(settingsService));
+            _settingsWindow.ShowSettings();
+        }
+
+        window.SettingsRequested += OpenSettings;
+        _tray = new TrayIcon(window.ShowLauncher, OpenSettings, Shutdown);
+        _singleInstance.Listen(() => Dispatcher.BeginInvoke(window.ShowLauncher));
+
+        if (settings.StartOnSystemStartup)
+        {
+            // Exe yolu değişmiş olabilir: kaydı güncel yolla yenile.
+            try
+            {
+                new RegistryAutoStart().SetEnabled(true);
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Otomatik başlatma kaydı yenilenemedi");
+            }
+        }
+
         if (!_hotkey.TryRegister(hwnd, settings.Hotkey, out var error))
         {
             Log.Warning("Kısayol kaydedilemedi: {Error}", error);
@@ -86,6 +131,8 @@ public partial class App : Application
     {
         _hotkey?.Dispose();
         _tray?.Dispose();
+        _settingsWindow?.CloseForExit();
+        _singleInstance?.Dispose();
 
         if (_host is not null)
         {

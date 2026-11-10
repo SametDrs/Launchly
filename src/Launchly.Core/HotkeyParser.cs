@@ -52,6 +52,59 @@ public static class HotkeyParser
         return true;
     }
 
+    /// <summary>Değiştirici bayrakları ve sanal tuş kodunu "Ctrl+Alt+K" biçimine çevirir; <see cref="TryParse"/> ile gidiş-dönüş yapar.</summary>
+    public static bool TryFormat(uint modifiers, uint virtualKey, out string text)
+    {
+        text = string.Empty;
+        var name = KeyName(virtualKey);
+        if (name is null || modifiers == 0)
+        {
+            return false;
+        }
+
+        var parts = new List<string>();
+        if ((modifiers & ModControl) != 0) parts.Add("Ctrl");
+        if ((modifiers & ModAlt) != 0) parts.Add("Alt");
+        if ((modifiers & ModShift) != 0) parts.Add("Shift");
+        if ((modifiers & ModWin) != 0) parts.Add("Win");
+        parts.Add(name);
+        text = string.Join('+', parts);
+        return true;
+    }
+
+    private static string? KeyName(uint vk)
+    {
+        if (vk is (>= 'A' and <= 'Z') or (>= '0' and <= '9'))
+        {
+            return ((char)vk).ToString();
+        }
+
+        if (vk is >= 0x70 and <= 0x87)
+        {
+            return "F" + (vk - 0x70 + 1);
+        }
+
+        return vk switch
+        {
+            0x20 => "Space",
+            0x0D => "Enter",
+            0x09 => "Tab",
+            0x1B => "Esc",
+            0x08 => "Backspace",
+            0x2D => "Insert",
+            0x2E => "Delete",
+            0x24 => "Home",
+            0x23 => "End",
+            0x21 => "PageUp",
+            0x22 => "PageDown",
+            0x25 => "Left",
+            0x26 => "Up",
+            0x27 => "Right",
+            0x28 => "Down",
+            _ => null,
+        };
+    }
+
     private static bool TryParseKey(string name, out uint vk)
     {
         vk = 0;

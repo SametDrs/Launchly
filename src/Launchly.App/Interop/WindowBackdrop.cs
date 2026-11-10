@@ -54,6 +54,15 @@ public static class WindowBackdrop
             }
         }
 
+        if (applied == BackdropType.None && IsSupported)
+        {
+            // Önceden uygulanmış Mica/Acrylic'i kaldır (ayar çalışma anında değişebilir).
+            var none = 1; // DWMSBT_NONE
+            DwmSetWindowAttribute(hwnd, DwmwaSystemBackdropType, ref none, sizeof(int));
+            var margins = new Margins();
+            DwmExtendFrameIntoClientArea(hwnd, ref margins);
+        }
+
         if (IsSupported)
         {
             var corner = DwmwcpRound;
