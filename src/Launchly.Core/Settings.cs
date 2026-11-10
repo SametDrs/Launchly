@@ -21,6 +21,9 @@ public sealed class Settings
     /// <summary>Kullanıcının kapattığı eklentilerin kimlikleri (<c>PluginMetadata.Id</c>).</summary>
     public List<string> DisabledPlugins { get; set; } = [];
 
+    /// <summary>Web arama kaynakları (WebSearch eklentisi). Ayarda yoksa varsayılanlar gelir.</summary>
+    public List<SearchSource> SearchSources { get; set; } = SearchSource.CreateDefaults();
+
     /// <summary>Windows açılışında başlat.</summary>
     public bool StartOnSystemStartup { get; set; }
 

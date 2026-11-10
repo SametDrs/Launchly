@@ -11,6 +11,7 @@ using Launchly.Core.Plugins;
 using Launchly.Core.Storage;
 using Launchly.Plugin;
 using Launchly.Plugins.Programs;
+using Launchly.Plugins.WebSearch;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -106,6 +107,8 @@ public partial class App : Application
         services.AddSingleton(sp => sp.GetRequiredService<JsonStorage<Settings>>().Load());
         // Dahili eklentiler (IPlugin); 05-06 görevleri buraya AddSingleton<IPlugin, ...>() ile ekler.
         services.AddSingleton<IPlugin, ProgramsPlugin>();
+        services.AddSingleton<IUrlOpener, ShellUrlOpener>();
+        services.AddSingleton<IPlugin, WebSearchPlugin>();
         services.AddSingleton<PluginManager>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
