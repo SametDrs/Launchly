@@ -1,5 +1,5 @@
-﻿; Launchly kurulum betiÄŸi (Inno Setup 6).
-; Derleme: installer\build.ps1 (Ã¶nce self-contained publish alÄ±r, sonra ISCC Ã§alÄ±ÅŸtÄ±rÄ±r).
+﻿; Launchly kurulum betiği (Inno Setup 6).
+; Derleme: installer\build.ps1 (önce self-contained publish alır, sonra ISCC çalıştırır).
 
 #define AppName "Launchly"
 #define AppVersion "1.0.0"
@@ -15,7 +15,7 @@ AppPublisherURL=https://github.com/SametDrs/Launchly
 DefaultDirName={localappdata}\Programs\{#AppName}
 DefaultGroupName={#AppName}
 DisableProgramGroupPage=yes
-; KullanÄ±cÄ± kapsamÄ±nda kurulur; yÃ¶netici izni gerekmez.
+; Kullanıcı kapsamında kurulur; yönetici izni gerekmez.
 PrivilegesRequired=lowest
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
@@ -49,14 +49,14 @@ Filename: "{app}\{#AppExe}"; Description: "{cm:LaunchProgram,{#AppName}}"; Flags
 Filename: "{sys}\taskkill.exe"; Parameters: "/F /IM {#AppExe}"; Flags: runhidden; RunOnceId: "KillLaunchly"
 
 [Registry]
-; Ayarlardan aÃ§Ä±lan otomatik baÅŸlatma kaydÄ± kaldÄ±rmada silinir.
+; Ayarlardan açılan otomatik başlatma kaydı kaldırmada silinir.
 Root: HKCU; Subkey: "Software\Microsoft\Windows\CurrentVersion\Run"; ValueType: none; ValueName: "{#AppName}"; Flags: uninsdeletevalue dontcreatekey
 
 [Code]
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
-  // KullanÄ±cÄ± verisi (%AppData%\Launchly: ayarlar, Ã¶nbellek, loglar) yalnÄ±zca onayla silinir.
+  // Kullanıcı verisi (%AppData%\Launchly: ayarlar, önbellek, loglar) yalnızca onayla silinir.
   if CurUninstallStep = usPostUninstall then
-    if MsgBox('Ayarlar ve Ã¶nbellek (%AppData%\Launchly) de silinsin mi?', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
+    if MsgBox('Ayarlar ve önbellek (%AppData%\Launchly) de silinsin mi?', mbConfirmation, MB_YESNO or MB_DEFBUTTON2) = IDYES then
       DelTree(ExpandConstant('{userappdata}\Launchly'), True, True, True);
 end;
