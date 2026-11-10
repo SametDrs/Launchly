@@ -1,0 +1,39 @@
+# Build çıktıları
+bin/
+obj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa]rm64/
+publish/
+artifacts/
+
+# IDE / kullanıcı dosyaları
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.userprefs
+*.rsuser
+*.sln.docstates
+
+# Test sonuçları
+TestResults/
+[Tt]est[Rr]esult*/
+*.trx
+coverage*.json
+coverage*.xml
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+
+# Loglar ve geçici dosyalar
+*.log
+*.tmp
+Thumbs.db
+Desktop.ini
+.DS_Store

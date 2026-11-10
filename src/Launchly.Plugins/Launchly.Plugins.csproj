@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0-windows10.0.19041.0</TargetFramework>
+    <RootNamespace>Launchly.Plugins</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Launchly.Plugin\Launchly.Plugin.csproj" />
+    <ProjectReference Include="..\Launchly.Core\Launchly.Core.csproj" />
+  </ItemGroup>
+
+</Project>

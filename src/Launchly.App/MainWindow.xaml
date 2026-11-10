@@ -1,0 +1,10 @@
+<Window x:Class="Launchly.App.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Launchly"
+        Width="720"
+        Height="120"
+        WindowStartupLocation="CenterScreen">
+    <!-- Geçici boş pencere; asıl tasarım 02-pencere görevinde. -->
+    <Grid />
+</Window>
