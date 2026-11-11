@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
 using Launchly.App.ViewModels;
 using Launchly.Core;
@@ -29,9 +30,32 @@ public partial class MainWindow : Window
             HideLauncher();
             SettingsRequested?.Invoke();
         };
+        ActionsButton.Click += (_, _) =>
+        {
+            _viewModel.ToggleActionMenu();
+            FocusSearchBox();   // düğme odak almaz ama tık pencereyi etkinleştirir; tuşlar kutudan gelmeye devam etsin
+        };
+        ActionList.PreviewMouseLeftButtonUp += (_, e) =>
+        {
+            // Tıklanan öğe fare basışında seçilir (SelectedActionIndex); bırakınca çalışır. Çift tetiklemede
+            // (Enter + tık) ikinci çağrı, menü zaten kapandığı için yok sayılır.
+            if (e.OriginalSource is DependencyObject source
+                && ItemsControl.ContainerFromElement(ActionList, source) is ListViewItem)
+            {
+                _ = ExecuteSelectedAsync();
+                e.Handled = true;
+            }
+        };
         PreviewKeyDown += OnPreviewKeyDown;
         viewModel.PropertyChanged += (_, e) =>
         {
+            if (e.PropertyName == nameof(MainViewModel.SelectedActionIndex)
+                && viewModel.SelectedActionIndex is var actionIndex and >= 0
+                && actionIndex < ActionList.Items.Count)
+            {
+                ActionList.ScrollIntoView(ActionList.Items[actionIndex]);
+            }
+
             if (e.PropertyName == nameof(MainViewModel.SelectedIndex)
                 && viewModel.SelectedIndex >= 0
                 && viewModel.SelectedIndex < ResultList.Items.Count)
@@ -70,13 +94,13 @@ public partial class MainWindow : Window
         Show();
         Activate();
         Focus();
-        SearchBox.Focus();
-        Keyboard.Focus(SearchBox);
+        FocusSearchBox();
     }
 
     public void HideLauncher()
     {
         _viewModel.CancelPendingExecute();
+        _viewModel.CloseActionMenu();
         if (IsVisible)
         {
             Hide();
@@ -88,9 +112,26 @@ public partial class MainWindow : Window
         // Alt basılıyken WPF tuşu Key.System olarak bildirir.
         var key = e.Key == Key.System ? e.SystemKey : e.Key;
 
-        if (Keyboard.Modifiers == ModifierKeys.Alt && TryGetDigit(key, out var number))
+        var modifiers = Keyboard.Modifiers;
+
+        if (modifiers == ModifierKeys.Alt && TryGetDigit(key, out var number))
         {
-            _viewModel.SelectByNumber(number);
+            _viewModel.SelectByNumber(number);   // menü açıkken etkisiz
+            e.Handled = true;
+            return;
+        }
+
+        if (modifiers == ModifierKeys.Control && key == Key.K)
+        {
+            _viewModel.ToggleActionMenu();
+            e.Handled = true;
+            return;
+        }
+
+        // Düz Enter'dan önce: menü açmadan yönetici olarak çalıştır (desteklemeyen sonuçta hiçbir şey yapmaz).
+        if (modifiers == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.Enter)
+        {
+            _ = ExecuteSelectedAsAdminAsync();
             e.Handled = true;
             return;
         }
@@ -98,7 +139,12 @@ public partial class MainWindow : Window
         switch (key)
         {
             case Key.Escape:
-                HideLauncher();
+                // Menü açıksa yalnızca menü kapanır; değilse pencere gizlenir.
+                if (_viewModel.HandleEscape())
+                {
+                    HideLauncher();
+                }
+
                 e.Handled = true;
                 break;
             case Key.Down:
@@ -131,6 +177,20 @@ public partial class MainWindow : Window
         {
             HideLauncher();
         }
+    }
+
+    private async Task ExecuteSelectedAsAdminAsync()
+    {
+        if (await _viewModel.ExecuteSelectedAsAdminAsync())
+        {
+            HideLauncher();
+        }
+    }
+
+    private void FocusSearchBox()
+    {
+        SearchBox.Focus();
+        Keyboard.Focus(SearchBox);
     }
 
     private static bool TryGetDigit(Key key, out int number)

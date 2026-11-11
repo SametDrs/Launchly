@@ -66,6 +66,38 @@
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>
+
+                <TextBlock Text="Gizlenen uygulamalar" FontSize="15" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Margin="0,24,0,8" />
+                <TextBlock Text="Eylem menüsünden (Ctrl+K) gizlenen uygulamalar aramada çıkmaz. &quot;Göster&quot; hemen uygulanır; &quot;Geri al&quot; bunu geri almaz."
+                           FontSize="12" Foreground="{StaticResource SubTextBrush}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <TextBlock Text="Gizlenen uygulama yok." FontSize="13" Foreground="{StaticResource SubTextBrush}">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding HasHiddenPrograms}" Value="True">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
+                <ItemsControl ItemsSource="{Binding HiddenPrograms}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13" Foreground="{StaticResource TextBrush}"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Id}" />
+                                <Button Grid.Column="1" Content="Göster" Style="{StaticResource PushButtonStyle}"
+                                        Tag="{Binding}" Click="OnUnhideProgram" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
             </StackPanel>
         </ScrollViewer>
 

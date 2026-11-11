@@ -356,6 +356,31 @@ public sealed class SettingsServiceTests : IDisposable
         Assert.Equal(_live.SearchSources.Count, vm.Sources.Count);
     }
 
+    [Fact]
+    public void ViewModel_HiddenPrograms_FollowStore_AndUnhideIsImmediate()
+    {
+        using var usage = new Launchly.Plugins.Programs.ProgramUsageStore(
+            Path.Combine(_dir, "usage.json"), writeDelay: TimeSpan.FromHours(1));
+        usage.Hide("lnk:a", "Alpha");
+        var vm = new SettingsViewModel(_service, usage);
+
+        Assert.Equal([new HiddenProgramItem("lnk:a", "Alpha")], vm.HiddenPrograms);
+        Assert.True(vm.HasHiddenPrograms);
+
+        usage.Hide("app:b", string.Empty);                      // ad yoksa kimlik gösterilir
+        Assert.Equal(["Alpha", "app:b"], vm.HiddenPrograms.Select(h => h.Name));
+
+        vm.Unhide(vm.HiddenPrograms[0]);
+        Assert.False(usage.IsHidden("lnk:a"));                   // taslak/Apply beklemeden
+        vm.Revert();                                             // "Geri al" gizlemeyi geri getirmez
+        Assert.False(usage.IsHidden("lnk:a"));
+        Assert.Equal(["app:b"], vm.HiddenPrograms.Select(h => h.Id));
+
+        vm.Unhide(vm.HiddenPrograms[0]);
+        Assert.False(vm.HasHiddenPrograms);
+        Assert.False(new SettingsViewModel(_service).HasHiddenPrograms);   // store yoksa bölüm boş
+    }
+
     [Theory]
     [InlineData("{\"DisabledPlugins\":null}")]
     [InlineData("{\"SearchSources\":[null]}")]

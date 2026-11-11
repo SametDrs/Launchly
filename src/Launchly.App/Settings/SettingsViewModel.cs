@@ -1,8 +1,13 @@
 using System.Collections.ObjectModel;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Launchly.Core;
+using Launchly.Plugins.Programs;
 
 namespace Launchly.App.SettingsUi;
+
+/// <summary>Ayar penceresindeki gizlenen uygulama satırı.</summary>
+public sealed record HiddenProgramItem(string Id, string Name);
 
 /// <summary>Ayar penceresindeki tek web kaynağı satırı (düzenlenebilir).</summary>
 public sealed partial class SearchSourceItem : ObservableObject
@@ -36,6 +41,8 @@ public sealed partial class SearchSourceItem : ObservableObject
 public sealed partial class SettingsViewModel : ObservableObject
 {
     private readonly SettingsService _service;
+    private readonly ProgramUsageStore? _usage;
+    private readonly Dispatcher _dispatcher;
 
     [ObservableProperty] private string _hotkey = string.Empty;
     [ObservableProperty] private BackdropType _backdrop;
@@ -44,13 +51,61 @@ public sealed partial class SettingsViewModel : ObservableObject
     [ObservableProperty] private string _message = string.Empty;
     [ObservableProperty] private bool _isError;
 
-    public SettingsViewModel(SettingsService service)
+    /// <param name="usage">Gizlenen uygulamalar bölümünün kaynağı; verilmezse bölüm boş kalır.</param>
+    public SettingsViewModel(SettingsService service, ProgramUsageStore? usage = null)
     {
         _service = service;
+        _usage = usage;
+        _dispatcher = Dispatcher.CurrentDispatcher;
         Revert();
+
+        if (usage is not null)
+        {
+            // Store değişikliği (menüden Gizle, buradan Göster) herhangi bir iş parçacığından gelebilir: UI'a taşınır.
+            usage.Changed += OnUsageChanged;
+            RefreshHidden();
+        }
     }
 
     public ObservableCollection<SearchSourceItem> Sources { get; } = [];
+
+    /// <summary>
+    /// Gizlenen uygulamalar. Taslak/Uygula akışına girmez: "Göster" store'u hemen günceller, "Geri al" bunu geri almaz.
+    /// </summary>
+    public ObservableCollection<HiddenProgramItem> HiddenPrograms { get; } = [];
+
+    public bool HasHiddenPrograms => HiddenPrograms.Count > 0;
+
+    /// <summary>"Göster": gizlemeyi hemen kaldırır; liste <see cref="ProgramUsageStore.Changed"/> ile yenilenir.</summary>
+    public void Unhide(HiddenProgramItem item) => _usage?.Unhide(item.Id);
+
+    private void OnUsageChanged()
+    {
+        if (_dispatcher.CheckAccess())
+        {
+            RefreshHidden();
+        }
+        else
+        {
+            _dispatcher.BeginInvoke(RefreshHidden);
+        }
+    }
+
+    private void RefreshHidden()
+    {
+        if (_usage is null)
+        {
+            return;
+        }
+
+        HiddenPrograms.Clear();
+        foreach (var h in _usage.Hidden)
+        {
+            HiddenPrograms.Add(new HiddenProgramItem(h.Id, h.Name.Length > 0 ? h.Name : h.Id));
+        }
+
+        OnPropertyChanged(nameof(HasHiddenPrograms));
+    }
 
     public bool IsBackdropNone
     {

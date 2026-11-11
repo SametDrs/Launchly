@@ -1,8 +1,9 @@
-using System.Diagnostics;
+using System.ComponentModel;
 using Launchly.Core;
 using Launchly.Core.Querying;
 using Launchly.Core.Storage;
 using Launchly.Plugin;
+using Launchly.Plugins.Calculator;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -30,42 +31,47 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
     private readonly Settings? _settings;
     private readonly CancellationTokenSource _shutdown = new();
     private readonly IconLoader _icons = new();
-    private readonly Action<string> _launch;
+    private readonly IProgramLauncher _launcher;
+    private readonly IClipboardService? _clipboard;
     private readonly object _saveGate = new();
     private volatile ProgramEntry[] _entries = [];
     private int _disposed;
 
     /// <summary>DI için: gerçek Start Menu klasörleri + AppsFolder, <c>%AppData%\Launchly\cache\programs.json</c>.</summary>
-    public ProgramsPlugin(ILogger<ProgramsPlugin> logger, Settings settings, ProgramUsageStore usage)
+    public ProgramsPlugin(ILogger<ProgramsPlugin> logger, Settings settings, ProgramUsageStore usage, IClipboardService clipboard)
         : this(
             logger,
             Path.Combine(DataLocation.RoamingDirectory, "cache", "programs.json"),
             new ProgramScanner(ProgramScanner.DefaultRoots(), logger: logger),
-            LaunchShell,
+            new ShellProgramLauncher(),
             settings,
             new AppsFolderScanner(),
             usage,
-            DefaultBrowser.GetExecutablePath)
+            DefaultBrowser.GetExecutablePath,
+            clipboard)
     {
     }
 
     /// <param name="usage">Verilmezse önbelleğin yanında (<c>usage.json</c>) eklentiye ait bir kayıt açılır ve Dispose'da kapatılır.</param>
     /// <param name="defaultBrowser">Varsayılan tarayıcı exe yolu; verilmezse tarayıcı başlangıç listesinde yoktur.</param>
+    /// <param name="clipboard">Verilmezse "Yolu kopyala" eylemi sunulmaz.</param>
     internal ProgramsPlugin(
         ILogger logger,
         string cachePath,
         ProgramScanner scanner,
-        Action<string> launch,
+        IProgramLauncher launcher,
         Settings? settings = null,
         IAppsFolderSource? appsFolder = null,
         ProgramUsageStore? usage = null,
-        Func<string?>? defaultBrowser = null)
+        Func<string?>? defaultBrowser = null,
+        IClipboardService? clipboard = null)
     {
         _settings = settings;
         _logger = logger ?? NullLogger.Instance;
         _cacheStorage = new JsonStorage<ProgramCache>(cachePath, _logger);
         _scanner = scanner;
-        _launch = launch;
+        _launcher = launcher;
+        _clipboard = clipboard;
         _appsFolder = appsFolder ?? EmptyAppsFolderSource.Instance;
         _ownsUsage = usage is null;
         _usage = usage ?? new ProgramUsageStore(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(cachePath))!, "usage.json"), logger: _logger);
@@ -138,7 +144,9 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
 
     public Task<IReadOnlyList<Result>> QueryAsync(Query query, CancellationToken cancellationToken)
     {
-        var entries = _entries;
+        // Gizli küme kilitsiz anlık görüntüden okunur; gizlenenler hem boş listeden hem aramadan çıkar.
+        var hidden = _usage.HiddenIds;
+        var entries = hidden.Count == 0 ? _entries : _entries.Where(e => !hidden.Contains(e.Id)).ToArray();
 
         // İkon yüklemek pahalı: yalnızca listede gösterilebilecek kadar (Settings.MaxResults) sonuç üretilir.
         var limit = _settings is null ? MaxReturned : Math.Clamp(_settings.MaxResults, 1, MaxReturned);
@@ -147,7 +155,7 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
         if (string.IsNullOrWhiteSpace(query.Search))
         {
             limit = Math.Min(Settings.EmptyQueryMaxResults, limit);
-            scored = EmptyQueryList(entries, limit).Select(e => (e, 0));   // sıra korunur (eşit puanda kararlı sıralama)
+            scored = EmptyQueryList(entries, hidden, limit).Select(e => (e, 0));   // sıra korunur (eşit puanda kararlı sıralama)
         }
         else
         {
@@ -171,7 +179,8 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
                 Score = score,
                 TypeLabel = "Application",
                 IconImage = IconFor(entry),
-                Action = () => Task.FromResult(TryLaunch(captured)),
+                Action = () => Task.FromResult(TryLaunch(captured, asAdmin: false)),
+                ContextActions = BuildActions(captured),
             });
         }
 
@@ -186,10 +195,11 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
     }
 
     /// <summary>
-    /// Boş kutu: önce kullanım kaydındakiler (frecency azalan; artık bulunmayan kimlik atlanır), sonra kalan yer
-    /// başlangıç listesiyle dolar (zaten listede olan atlanır). Kayıt yoksa yalnızca başlangıç listesi.
+    /// Boş kutu: önce sabitlenenler (sabitleme sırasıyla), sonra kullanım kaydındakiler (frecency azalan), sonra kalan
+    /// yer başlangıç listesiyle dolar (zaten listede olan atlanır). Artık bulunmayan kimlik (kaldırılmış uygulama) yer
+    /// kaplamadan atlanır ama kayıtta kalır. Gizlenenler hiçbir aşamada gösterilmez. Toplam <paramref name="limit"/>.
     /// </summary>
-    private List<ProgramEntry> EmptyQueryList(ProgramEntry[] entries, int limit)
+    private List<ProgramEntry> EmptyQueryList(ProgramEntry[] entries, IReadOnlySet<string> hidden, int limit)
     {
         var starters = StarterApps.Resolve(entries, _defaultBrowser);
         var byId = new Dictionary<string, ProgramEntry>(StringComparer.OrdinalIgnoreCase);
@@ -205,6 +215,22 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
 
         var list = new List<ProgramEntry>(limit);
         var added = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        void Add(ProgramEntry entry)
+        {
+            if (list.Count < limit && !hidden.Contains(entry.Id) && added.Add(entry.Id))
+            {
+                list.Add(entry);
+            }
+        }
+
+        foreach (var id in _usage.PinnedIds)
+        {
+            if (byId.TryGetValue(id, out var entry))
+            {
+                Add(entry);
+            }
+        }
+
         foreach (var id in _usage.TopIds(int.MaxValue))
         {
             if (list.Count >= limit)
@@ -212,23 +238,15 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
                 break;
             }
 
-            if (byId.TryGetValue(id, out var entry) && added.Add(entry.Id))
+            if (byId.TryGetValue(id, out var entry))
             {
-                list.Add(entry);
+                Add(entry);
             }
         }
 
         foreach (var s in starters)
         {
-            if (list.Count >= limit)
-            {
-                break;
-            }
-
-            if (added.Add(s.Id))
-            {
-                list.Add(s);
-            }
+            Add(s);
         }
 
         return list;
@@ -342,12 +360,160 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
         }
     }
 
-    private bool TryLaunch(ProgramEntry entry)
+    /// <summary>
+    /// Menü eylemleri (<see cref="ProgramEntry.Kind"/>'a göre). Paketli (AppsFolder) uygulamada <c>runas</c> uygulanamaz
+    /// ve kurulum klasörü açılmaz: yönetici ve konum eylemi yoktur. "Aç" eklenmez (arayüz <see cref="Result.Action"/>'dan ekler).
+    /// </summary>
+    internal IReadOnlyList<ResultAction> BuildActions(ProgramEntry entry)
+    {
+        var actions = new List<ResultAction>();
+        if (CanRunAsAdmin(entry))
+        {
+            actions.Add(new ResultAction
+            {
+                Id = ResultAction.RunAsAdminId,
+                Title = "Yönetici olarak çalıştır",
+                Glyph = "",   // Admin
+                Hint = "Ctrl+Shift+Enter",
+                Execute = () => Task.FromResult(TryLaunch(entry, asAdmin: true)),
+            });
+        }
+
+        if (RevealPath(entry) is { } reveal)
+        {
+            actions.Add(new ResultAction
+            {
+                Title = "Dosya konumunu aç",
+                Glyph = "",   // FolderOpen
+                Execute = () => Task.FromResult(TryReveal(reveal)),
+            });
+        }
+
+        if (_clipboard is { } clipboard && CopyPath(entry) is { Length: > 0 } copy)
+        {
+            actions.Add(new ResultAction
+            {
+                Title = "Yolu kopyala",
+                Glyph = "",   // Copy
+                Execute = () => Task.FromResult(TryCopy(clipboard, copy)),
+            });
+        }
+
+        var id = entry.Id;
+        var name = entry.Name;
+        actions.Add(new ResultAction
+        {
+            Title = "Gizle",
+            Glyph = "",   // Hide
+            RequeryAfter = true,
+            Execute = () => Task.FromResult(ChangePrefs(() => _usage.Hide(id, name), id)),
+        });
+
+        // Başlık sorgu anındaki duruma göre; eylem başlığın söylediğini yapar (arada değiştiyse etkisiz kalır).
+        var pinned = _usage.IsPinned(id);
+        actions.Add(new ResultAction
+        {
+            Title = pinned ? "Sabitlemeyi kaldır" : "Sabitle",
+            Glyph = pinned ? "" : "",   // Unpin / Pin
+            RequeryAfter = true,
+            Execute = () => Task.FromResult(ChangePrefs(() => pinned ? _usage.Unpin(id) : _usage.Pin(id), id)),
+        });
+
+        return actions;
+    }
+
+    // Command girdisinde protokol (ör. "ms-settings:") yönetici olarak açılamaz.
+    private static bool CanRunAsAdmin(ProgramEntry entry) => entry.Kind switch
+    {
+        ProgramKind.Shortcut => entry.ShortcutPath.Length > 0,
+        ProgramKind.Command => entry.ShortcutPath.Length > 0 && !entry.ShortcutPath.EndsWith(':'),
+        _ => false,
+    };
+
+    /// <summary>Gezgin'de seçilecek dosya: hedef doluysa ve varsa o, yoksa .lnk. Command: çözülen dosya. AppsFolder: yok.</summary>
+    internal static string? RevealPath(ProgramEntry entry) => entry.Kind switch
+    {
+        ProgramKind.Shortcut when entry.TargetPath.Length > 0 && File.Exists(entry.TargetPath) => entry.TargetPath,
+        ProgramKind.Shortcut when entry.ShortcutPath.Length > 0 => entry.ShortcutPath,
+        ProgramKind.Command => CommandIconPath(entry.ShortcutPath),
+        _ => null,
+    };
+
+    /// <summary>Panoya yazılacak yol: hedef doluysa o, yoksa .lnk; Command: çözülen dosya ya da komut; AppsFolder: <c>shell:AppsFolder\&lt;AUMID&gt;</c>.</summary>
+    internal static string CopyPath(ProgramEntry entry) => entry.Kind switch
+    {
+        ProgramKind.AppsFolder => entry.LaunchPath,
+        ProgramKind.Command => CommandIconPath(entry.ShortcutPath) ?? entry.ShortcutPath,
+        _ => entry.TargetPath.Length > 0 ? entry.TargetPath : entry.ShortcutPath,
+    };
+
+    // Gizle/sabitle: bellek anında güncellenir, disk debounce ile. Pencere açık kalır (false); liste RequeryAfter ile yenilenir.
+    private bool ChangePrefs(Func<bool> change, string id)
+    {
+        if (Volatile.Read(ref _disposed) != 0)
+        {
+            return false;
+        }
+
+        try
+        {
+            change();
+        }
+        catch (Exception ex)
+        {
+            SafeLog(l => l.LogWarning(ex, "Gizleme/sabitleme kaydedilemedi: {Id}", id));
+        }
+
+        return false;
+    }
+
+    private bool TryReveal(string path)
+    {
+        try
+        {
+            _launcher.Reveal(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            SafeLog(l => l.LogError(ex, "Dosya konumu açılamadı: {Path}", path));
+            return false;
+        }
+    }
+
+    private bool TryCopy(IClipboardService clipboard, string text)
+    {
+        try
+        {
+            clipboard.SetText(text);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            SafeLog(l => l.LogError(ex, "Yol panoya yazılamadı"));
+            return false;
+        }
+    }
+
+    private bool TryLaunch(ProgramEntry entry, bool asAdmin)
     {
         var path = entry.LaunchPath;
         try
         {
-            _launch(path);
+            if (asAdmin)
+            {
+                _launcher.LaunchAsAdmin(path);
+            }
+            else
+            {
+                _launcher.Launch(path);
+            }
+        }
+        catch (Win32Exception ex) when (asAdmin && ex.NativeErrorCode == ShellProgramLauncher.ErrorCancelled)
+        {
+            // Kullanıcı UAC istemini reddetti: hata değil; pencere açık kalır, kullanım sayılmaz.
+            SafeLog(l => l.LogInformation("Yönetici olarak çalıştırma kullanıcı tarafından iptal edildi: {Path}", path));
+            return false;
         }
         catch (Exception ex)
         {
@@ -370,8 +536,4 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
 
         return true;
     }
-
-    /// <summary>.lnk yolu, <c>shell:AppsFolder\&lt;AUMID&gt;</c> ya da komut; kabuk (ShellExecute) açar.</summary>
-    private static void LaunchShell(string path) =>
-        Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose();
 }

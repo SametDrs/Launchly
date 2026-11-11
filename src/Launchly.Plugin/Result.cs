@@ -25,6 +25,12 @@ public sealed class Result
     /// <summary>Enter ile çalışır. true dönerse pencere gizlenir, false dönerse açık kalır. null = eylem yok.</summary>
     public Func<Task<bool>>? Action { get; init; }
 
+    /// <summary>
+    /// Eylem menüsündeki ek eylemler (Ctrl+K). Varsayılan boş: eylemi olmayan eklentiler değişmeden derlenir.
+    /// "Aç" buraya konmaz; <see cref="Action"/> doluysa menüye ilk öğe olarak arayüz ekler.
+    /// </summary>
+    public IReadOnlyList<ResultAction> ContextActions { get; init; } = [];
+
     /// <summary>Sonucu üreten eklentinin kimliği; <c>PluginManager</c> doldurur.</summary>
     public string PluginId { get; set; } = string.Empty;
 }

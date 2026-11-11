@@ -97,7 +97,7 @@ public partial class App : Application
 
         void OpenSettings()
         {
-            _settingsWindow ??= new SettingsWindow(new SettingsViewModel(settingsService));
+            _settingsWindow ??= new SettingsWindow(new SettingsViewModel(settingsService, Services.GetRequiredService<ProgramUsageStore>()));
             _settingsWindow.ShowSettings();
         }
 

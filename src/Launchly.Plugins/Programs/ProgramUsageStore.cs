@@ -14,13 +14,27 @@ public sealed class UsageEntry
     public DateTime LastUsedUtc { get; init; }
 }
 
-/// <summary><c>usage.json</c> içeriği.</summary>
+/// <summary>Gizlenen uygulama. Ad, uygulama kaldırılsa da ayarlarda gösterilebilsin diye saklanır.</summary>
+public sealed class HiddenProgram
+{
+    public string Id { get; init; } = string.Empty;
+
+    public string Name { get; init; } = string.Empty;
+}
+
+/// <summary><c>usage.json</c> içeriği. <see cref="Hidden"/> ve <see cref="Pinned"/> eski dosyalarda yoktur: boş liste olur.</summary>
 public sealed class UsageData
 {
     public int Version { get; set; } = 1;
 
     /// <summary>Anahtar: <see cref="ProgramEntry.Id"/> (<see cref="StringComparer.OrdinalIgnoreCase"/>).</summary>
     public Dictionary<string, UsageEntry> Items { get; set; } = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Gizlenen uygulamalar (gizlenme sırasıyla); boş listede ve aramada görünmez.</summary>
+    public List<HiddenProgram> Hidden { get; set; } = [];
+
+    /// <summary>Sabitlenen uygulamaların kimlikleri, sabitlenme sırasıyla; boş listede en üstte.</summary>
+    public List<string> Pinned { get; set; } = [];
 }
 
 /// <summary>
@@ -29,6 +43,11 @@ public sealed class UsageData
 /// Eşzamanlılık: okuma (<see cref="Frecency"/>, <see cref="TopIds"/>; eklenti iş parçacığı) kilitsizdir ve değişmez bir anlık
 /// görüntüyü okur. <see cref="RecordLaunch"/> (UI iş parçacığı) yalnızca belleği günceller; disk yazımı ~1 sn debounce ile
 /// iş parçacığı havuzunda tek yazıma birleştirilir. İki yazım aynı anda dosyaya erişmez (ayrı yazım kilidi).
+/// </para>
+/// <para>
+/// Gizleme ve sabitleme (<see cref="Hide"/>, <see cref="Pin"/>; menüden, UI iş parçacığında) belleği anında günceller,
+/// diske aynı debounce yolundan yazılır. Okuyucular (<see cref="HiddenIds"/>, <see cref="PinnedIds"/>) kilitsiz okur.
+/// Kullanım sayacı gizlemeyle silinmez: gizleme geri alınınca sıralama eski haline döner.
 /// </para>
 /// </summary>
 public sealed class ProgramUsageStore : IDisposable
@@ -46,6 +65,7 @@ public sealed class ProgramUsageStore : IDisposable
     private readonly object _gate = new();        // bellek durumu: _items, _dirty, _writeScheduled, _disposed
     private readonly object _writeGate = new();   // disk: aynı anda tek yazım
     private volatile ImmutableDictionary<string, UsageEntry> _items;
+    private volatile Prefs _prefs;                 // gizli + sabit; değişmez, tek nesne olarak değiştirilir
     private bool _dirty;
     private bool _writeScheduled;
     private bool _disposed;
@@ -62,10 +82,57 @@ public sealed class ProgramUsageStore : IDisposable
         _logger = logger ?? NullLogger.Instance;
         _writeDelay = writeDelay ?? DefaultWriteDelay;
         _storage = new JsonStorage<UsageData>(filePath, _logger);
-        _items = LoadItems();
+        (_items, _prefs) = Load();
     }
 
+    /// <summary>
+    /// Gizleme ya da sabitleme değişti (çağıranın iş parçacığında, kilit dışında). Ayar penceresi gibi abonelerin
+    /// UI iş parçacığına kendisi taşıması gerekir.
+    /// </summary>
+    public event Action? Changed;
+
     internal string FilePath => _storage.FilePath;
+
+    /// <summary>Gizlenen kimlikler (anlık görüntü, <see cref="StringComparer.OrdinalIgnoreCase"/>).</summary>
+    public IReadOnlySet<string> HiddenIds => _prefs.HiddenIds;
+
+    /// <summary>Gizlenen uygulamalar, gizlenme sırasıyla (anlık görüntü).</summary>
+    public IReadOnlyList<HiddenProgram> Hidden => _prefs.Hidden;
+
+    /// <summary>Sabitlenen kimlikler, sabitlenme sırasıyla (anlık görüntü).</summary>
+    public IReadOnlyList<string> PinnedIds => _prefs.Pinned;
+
+    public bool IsHidden(string id) => !string.IsNullOrEmpty(id) && _prefs.HiddenIds.Contains(id);
+
+    public bool IsPinned(string id) => !string.IsNullOrEmpty(id) && _prefs.PinnedSet.Contains(id);
+
+    /// <summary>Girdiyi gizler (zaten gizliyse ad güncellenmez). Kullanım sayacı ve sabitleme korunur. Değiştiyse true.</summary>
+    public bool Hide(string id, string name) => Update(id, p =>
+        p.HiddenIds.Contains(id) ? null : p with
+        {
+            Hidden = p.Hidden.Add(new HiddenProgram { Id = id, Name = name ?? string.Empty }),
+            HiddenIds = p.HiddenIds.Add(id),
+        });
+
+    /// <summary>Gizlemeyi geri alır. Değiştiyse true.</summary>
+    public bool Unhide(string id) => Update(id, p =>
+        !p.HiddenIds.Contains(id) ? null : p with
+        {
+            Hidden = p.Hidden.RemoveAll(h => string.Equals(h.Id, id, StringComparison.OrdinalIgnoreCase)),
+            HiddenIds = p.HiddenIds.Remove(id),
+        });
+
+    /// <summary>Girdiyi sabitler listesinin sonuna ekler. Değiştiyse true.</summary>
+    public bool Pin(string id) => Update(id, p =>
+        p.PinnedSet.Contains(id) ? null : p with { Pinned = p.Pinned.Add(id), PinnedSet = p.PinnedSet.Add(id) });
+
+    /// <summary>Sabitlemeyi kaldırır; diğer sabitlerin sırası korunur. Değiştiyse true.</summary>
+    public bool Unpin(string id) => Update(id, p =>
+        !p.PinnedSet.Contains(id) ? null : p with
+        {
+            Pinned = p.Pinned.RemoveAll(x => string.Equals(x, id, StringComparison.OrdinalIgnoreCase)),
+            PinnedSet = p.PinnedSet.Remove(id),
+        });
 
     /// <summary>Başarılı bir açılışı kaydeder: sayaç +1, son kullanım şimdi. Dispose sonrası yok sayılır. Diske beklemez.</summary>
     public void RecordLaunch(string id)
@@ -86,11 +153,57 @@ public sealed class ProgramUsageStore : IDisposable
             var now = _time.GetUtcNow().UtcDateTime;
             var count = _items.TryGetValue(id, out var old) ? old.Count : 0;
             _items = _items.SetItem(id, new UsageEntry { Count = count == int.MaxValue ? count : count + 1, LastUsedUtc = now });
-            _dirty = true;
-            schedule = !_writeScheduled;
-            _writeScheduled = true;
+            schedule = MarkDirtyLocked();
         }
 
+        ScheduleWrite(schedule);
+    }
+
+    // Gizli/sabit kümesini değiştirir. change null dönerse değişiklik yok. Dispose sonrası yok sayılır.
+    private bool Update(string id, Func<Prefs, Prefs?> change)
+    {
+        if (string.IsNullOrWhiteSpace(id))
+        {
+            return false;
+        }
+
+        bool schedule;
+        lock (_gate)
+        {
+            if (_disposed || change(_prefs) is not { } next)
+            {
+                return false;
+            }
+
+            _prefs = next;
+            schedule = MarkDirtyLocked();
+        }
+
+        ScheduleWrite(schedule);
+        try
+        {
+            Changed?.Invoke();
+        }
+        catch (Exception ex)
+        {
+            // Abone hatası menü eylemini bozmaz; bellek ve disk güncellemesi yapıldı.
+            SafeLog(l => l.LogWarning(ex, "Kullanım kaydı Changed abonesi hata verdi"));
+        }
+
+        return true;
+    }
+
+    // _gate altında: kirli işaretler; yeni yazım planlanması gerekiyorsa true.
+    private bool MarkDirtyLocked()
+    {
+        _dirty = true;
+        var schedule = !_writeScheduled;
+        _writeScheduled = true;
+        return schedule;
+    }
+
+    private void ScheduleWrite(bool schedule)
+    {
         if (schedule)
         {
             // Task.Run: gecikme 0 olsa bile yazım çağıranın (UI) iş parçacığında yapılmaz.
@@ -206,6 +319,7 @@ public sealed class ProgramUsageStore : IDisposable
         try
         {
             ImmutableDictionary<string, UsageEntry> snapshot;
+            Prefs prefs;
             lock (_gate)
             {
                 if (!_dirty)
@@ -215,11 +329,17 @@ public sealed class ProgramUsageStore : IDisposable
 
                 _dirty = false;
                 snapshot = _items;
+                prefs = _prefs;
             }
 
             try
             {
-                _storage.Save(new UsageData { Items = new Dictionary<string, UsageEntry>(snapshot, StringComparer.OrdinalIgnoreCase) });
+                _storage.Save(new UsageData
+                {
+                    Items = new Dictionary<string, UsageEntry>(snapshot, StringComparer.OrdinalIgnoreCase),
+                    Hidden = [.. prefs.Hidden],
+                    Pinned = [.. prefs.Pinned],
+                });
             }
             catch (Exception ex)
             {
@@ -238,9 +358,8 @@ public sealed class ProgramUsageStore : IDisposable
         }
     }
 
-    private ImmutableDictionary<string, UsageEntry> LoadItems()
+    private (ImmutableDictionary<string, UsageEntry> Items, Prefs Prefs) Load()
     {
-        var builder = ImmutableDictionary.CreateBuilder<string, UsageEntry>(StringComparer.OrdinalIgnoreCase);
         UsageData? data;
         try
         {
@@ -249,8 +368,44 @@ public sealed class ProgramUsageStore : IDisposable
         catch (Exception ex)
         {
             SafeLog(l => l.LogWarning(ex, "Kullanım kaydı yüklenemedi; boş kayıtla başlanıyor"));
-            return builder.ToImmutable();
+            return (ImmutableDictionary.Create<string, UsageEntry>(StringComparer.OrdinalIgnoreCase), Prefs.Empty);
         }
+
+        return (LoadItems(data), LoadPrefs(data));
+    }
+
+    // Eski dosyada alan yoksa boş liste; null, boş kimlik ve büyük/küçük harf ikizleri (ilk görülen kalır) atılır.
+    private static Prefs LoadPrefs(UsageData? data)
+    {
+        var prefs = Prefs.Empty;
+        foreach (var h in data?.Hidden ?? [])
+        {
+            if (h is null || string.IsNullOrWhiteSpace(h.Id) || prefs.HiddenIds.Contains(h.Id))
+            {
+                continue;
+            }
+
+            prefs = prefs with
+            {
+                Hidden = prefs.Hidden.Add(new HiddenProgram { Id = h.Id, Name = h.Name ?? string.Empty }),
+                HiddenIds = prefs.HiddenIds.Add(h.Id),
+            };
+        }
+
+        foreach (var id in data?.Pinned ?? [])
+        {
+            if (!string.IsNullOrWhiteSpace(id) && !prefs.PinnedSet.Contains(id))
+            {
+                prefs = prefs with { Pinned = prefs.Pinned.Add(id), PinnedSet = prefs.PinnedSet.Add(id) };
+            }
+        }
+
+        return prefs;
+    }
+
+    private ImmutableDictionary<string, UsageEntry> LoadItems(UsageData? data)
+    {
+        var builder = ImmutableDictionary.CreateBuilder<string, UsageEntry>(StringComparer.OrdinalIgnoreCase);
 
         // Elle düzenlenmiş/bozuk içerik: null ve geçersiz öğeler atılır; yalnızca büyük/küçük harfi farklı anahtarlar birleşir.
         foreach (var (key, value) in data?.Items ?? [])
@@ -297,5 +452,19 @@ public sealed class ProgramUsageStore : IDisposable
         {
             // Kapanışta log sağlayıcısı kapanmış olabilir; loglama hatası kaydı etkilemez.
         }
+    }
+
+    /// <summary>Gizli ve sabit kümeleri; değişmez, okuyucular tek nesneyi kilitsiz okur.</summary>
+    private sealed record Prefs(
+        ImmutableList<HiddenProgram> Hidden,
+        ImmutableHashSet<string> HiddenIds,
+        ImmutableList<string> Pinned,
+        ImmutableHashSet<string> PinnedSet)
+    {
+        public static readonly Prefs Empty = new(
+            [],
+            ImmutableHashSet.Create<string>(StringComparer.OrdinalIgnoreCase),
+            [],
+            ImmutableHashSet.Create<string>(StringComparer.OrdinalIgnoreCase));
     }
 }

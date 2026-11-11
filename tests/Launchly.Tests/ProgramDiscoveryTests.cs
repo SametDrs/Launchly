@@ -105,7 +105,7 @@ public sealed class ProgramDiscoveryTests : IDisposable
         Action<string>? launch = null,
         Settings? settings = null)
     {
-        var plugin = new ProgramsPlugin(NullLogger.Instance, CachePath, scanner, launch ?? (_ => { }), settings, apps, usage, browser);
+        var plugin = new ProgramsPlugin(NullLogger.Instance, CachePath, scanner, new FakeProgramLauncher(launch), settings, apps, usage, browser);
         _disposables.Add(plugin);
         return plugin;
     }

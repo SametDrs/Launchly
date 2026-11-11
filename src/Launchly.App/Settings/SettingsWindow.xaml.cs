@@ -119,6 +119,14 @@ public partial class SettingsWindow : Window
         }
     }
 
+    private void OnUnhideProgram(object sender, RoutedEventArgs e)
+    {
+        if (sender is FrameworkElement { Tag: HiddenProgramItem item })
+        {
+            _viewModel.Unhide(item);
+        }
+    }
+
     private void OnApply(object sender, RoutedEventArgs e) => _viewModel.Apply();
 
     private void OnRevert(object sender, RoutedEventArgs e) => _viewModel.Revert();

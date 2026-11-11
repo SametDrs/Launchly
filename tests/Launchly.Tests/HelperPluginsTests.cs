@@ -222,7 +222,11 @@ public sealed class HelperPluginsTests : IDisposable
     {
         public List<string> Opened { get; } = [];
 
+        public List<string> Revealed { get; } = [];
+
         public void Open(string path) => Opened.Add(path);
+
+        public void Reveal(string path) => Revealed.Add(path);
     }
 
     private FilesPlugin CreateFiles(FakeFileOpener opener)
@@ -267,6 +271,38 @@ public sealed class HelperPluginsTests : IDisposable
         await cts.CancelAsync();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
             plugin.QueryAsync(new Query("f rapor", "f", "rapor"), cts.Token));
+    }
+
+    [Fact]
+    public async Task Files_Actions_RevealAndCopyPath()
+    {
+        var opener = new FakeFileOpener();
+        CreateFiles(opener);
+        var clip = new FakeClipboard();
+        var plugin = new FilesPlugin([_dir], opener, NullLogger.Instance, clip);
+
+        var r = Assert.Single(await Ask(plugin, "f notlar", "f", "notlar"));
+
+        Assert.Equal(["Dosya konumunu aç", "Yolu kopyala"], r.ContextActions.Select(a => a.Title));
+        Assert.All(r.ContextActions, a => Assert.False(a.RequeryAfter));
+        Assert.True(await r.ContextActions[0].Execute());
+        Assert.True(await r.ContextActions[1].Execute());
+        Assert.Equal([r.SubTitle], opener.Revealed);
+        Assert.Equal([r.SubTitle], clip.Texts);
+        Assert.Empty(opener.Opened);                           // "Aç" değil
+        Assert.Equal(Path.Combine(_dir, "notlar.txt"), r.SubTitle);
+    }
+
+    [Fact]
+    public async Task Files_WithoutClipboard_OnlyReveal_AndCopyFailureReturnsFalse()
+    {
+        var opener = new FakeFileOpener();
+        var plain = CreateFiles(opener);
+        Assert.Equal(["Dosya konumunu aç"], Assert.Single(await Ask(plain, "f notlar", "f", "notlar")).ContextActions.Select(a => a.Title));
+
+        var broken = new FilesPlugin([_dir], opener, NullLogger.Instance, new ThrowingClipboard());
+        var copy = Assert.Single(await Ask(broken, "f notlar", "f", "notlar")).ContextActions.Single(a => a.Title == "Yolu kopyala");
+        Assert.False(await copy.Execute());
     }
 
     [Fact]

@@ -13,6 +13,9 @@
         FontFamily="Segoe UI Variable Text, Segoe UI"
         UseLayoutRounding="True"
         TextOptions.TextFormattingMode="Display">
+    <Window.Resources>
+        <BooleanToVisibilityConverter x:Key="BoolToVisibility" />
+    </Window.Resources>
     <Border Background="{DynamicResource WindowBackgroundBrush}">
         <Grid>
             <Grid.RowDefinitions>
@@ -38,13 +41,58 @@
                 </Grid>
             </Border>
 
-            <!-- Sonuç listesi -->
+            <!-- Eylem menüsü (Ctrl+K / Actions): sonuç listesinin yerinde; Popup kullanılmaz (odak/topmost sorunları) -->
+            <StackPanel Grid.Row="1"
+                        Visibility="{Binding IsActionMenuOpen, Converter={StaticResource BoolToVisibility}}">
+                <TextBlock Text="{Binding ActionMenuTitle}" FontSize="12" FontWeight="SemiBold"
+                           Foreground="{StaticResource SubTextBrush}" TextTrimming="CharacterEllipsis"
+                           Margin="20,10,20,4" />
+                <ListView x:Name="ActionList" MaxHeight="400"
+                          Style="{StaticResource ResultListStyle}"
+                          ItemContainerStyle="{StaticResource ResultItemStyle}"
+                          ItemsSource="{Binding ActionItems}"
+                          SelectedIndex="{Binding SelectedActionIndex, Mode=TwoWay}"
+                          SelectionMode="Single">
+                    <ListView.ItemTemplate>
+                        <DataTemplate DataType="{x:Type vm:ActionItemViewModel}">
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <TextBlock Grid.Column="0" Width="34" Text="{Binding Glyph}"
+                                           FontFamily="{StaticResource IconFont}" FontSize="16"
+                                           Foreground="{StaticResource SubTextBrush}" TextAlignment="Center"
+                                           VerticalAlignment="Center" Margin="0,0,14,0" />
+                                <TextBlock Grid.Column="1" Text="{Binding Title}" FontSize="15"
+                                           Foreground="{StaticResource TextBrush}" VerticalAlignment="Center"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="2" Text="{Binding Hint}" FontSize="12"
+                                           Foreground="{StaticResource SubTextBrush}" VerticalAlignment="Center"
+                                           Margin="12,0,0,0"
+                                           Visibility="{Binding HasHint, Converter={StaticResource BoolToVisibility}}" />
+                            </Grid>
+                        </DataTemplate>
+                    </ListView.ItemTemplate>
+                </ListView>
+            </StackPanel>
+
+            <!-- Sonuç listesi (menü açıkken gizli) -->
             <ListView x:Name="ResultList" Grid.Row="1" MaxHeight="430"
-                      Style="{StaticResource ResultListStyle}"
                       ItemContainerStyle="{StaticResource ResultItemStyle}"
                       ItemsSource="{Binding Results}"
                       SelectedIndex="{Binding SelectedIndex, Mode=TwoWay}"
                       SelectionMode="Single">
+                <ListView.Style>
+                    <Style TargetType="ListView" BasedOn="{StaticResource ResultListStyle}">
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsActionMenuOpen}" Value="True">
+                                <Setter Property="Visibility" Value="Collapsed" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </ListView.Style>
                 <ListView.ItemTemplate>
                     <DataTemplate DataType="{x:Type vm:ResultItemViewModel}">
                         <Grid>
@@ -100,8 +148,14 @@
                 <Grid Margin="12,0">
                     <Button x:Name="SettingsButton" Content="Settings" HorizontalAlignment="Left"
                             Style="{StaticResource FooterButtonStyle}" />
-                    <Button x:Name="ActionsButton" Content="Actions" HorizontalAlignment="Right"
-                            Style="{StaticResource FooterButtonStyle}" />
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                        <TextBlock Text="Ctrl+Shift+Enter Yönetici" FontSize="12"
+                                   Foreground="{StaticResource SubTextBrush}" VerticalAlignment="Center"
+                                   Margin="0,0,10,0"
+                                   Visibility="{Binding CanRunSelectedAsAdmin, Converter={StaticResource BoolToVisibility}}" />
+                        <Button x:Name="ActionsButton" Content="Actions"
+                                Style="{StaticResource FooterButtonStyle}" />
+                    </StackPanel>
                 </Grid>
             </Border>
         </Grid>

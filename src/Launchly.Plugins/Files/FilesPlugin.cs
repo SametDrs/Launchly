@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using Launchly.Core.Querying;
 using Launchly.Plugin;
+using Launchly.Plugins.Calculator;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 
@@ -10,12 +11,18 @@ namespace Launchly.Plugins.Files;
 public interface IFileOpener
 {
     void Open(string path);
+
+    /// <summary>Gezgin'i açar ve dosyayı/klasörü seçili gösterir.</summary>
+    void Reveal(string path);
 }
 
 public sealed class ShellFileOpener : IFileOpener
 {
     public void Open(string path) =>
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose();
+
+    public void Reveal(string path) =>
+        Process.Start(new ProcessStartInfo("explorer.exe", $"/select,\"{path}\"") { UseShellExecute = true })?.Dispose();
 }
 
 /// <summary>
@@ -33,17 +40,20 @@ public sealed class FilesPlugin : IPlugin
 
     private readonly IReadOnlyList<string> _roots;
     private readonly IFileOpener _opener;
+    private readonly IClipboardService? _clipboard;
     private readonly ILogger _logger;
 
-    public FilesPlugin(IFileOpener opener, ILogger<FilesPlugin> logger)
-        : this(DefaultRoots(), opener, (ILogger)logger)
+    public FilesPlugin(IFileOpener opener, IClipboardService clipboard, ILogger<FilesPlugin> logger)
+        : this(DefaultRoots(), opener, (ILogger)logger, clipboard)
     {
     }
 
-    internal FilesPlugin(IEnumerable<string> roots, IFileOpener opener, ILogger? logger)
+    /// <param name="clipboard">Verilmezse "Yolu kopyala" eylemi sunulmaz.</param>
+    internal FilesPlugin(IEnumerable<string> roots, IFileOpener opener, ILogger? logger, IClipboardService? clipboard = null)
     {
         _roots = roots.ToArray();
         _opener = opener;
+        _clipboard = clipboard;
         _logger = logger ?? NullLogger.Instance;
     }
 
@@ -107,6 +117,7 @@ public sealed class FilesPlugin : IPlugin
                     Score = h.Score,
                     TypeLabel = h.IsDir ? "Folder" : "File",
                     Action = () => Task.FromResult(Open(path)),
+                    ContextActions = BuildActions(path),
                 };
             })
             .ToList();
@@ -160,6 +171,59 @@ public sealed class FilesPlugin : IPlugin
         foreach (var sub in subdirs)
         {
             Scan(sub, depth + 1, search, hits, ref scanned, ct);
+        }
+    }
+
+    private IReadOnlyList<ResultAction> BuildActions(string path)
+    {
+        var actions = new List<ResultAction>(2)
+        {
+            new()
+            {
+                Title = "Dosya konumunu aç",
+                Glyph = "",   // FolderOpen
+                Execute = () => Task.FromResult(Reveal(path)),
+            },
+        };
+
+        if (_clipboard is { } clipboard)
+        {
+            actions.Add(new ResultAction
+            {
+                Title = "Yolu kopyala",
+                Glyph = "",   // Copy
+                Execute = () => Task.FromResult(Copy(clipboard, path)),
+            });
+        }
+
+        return actions;
+    }
+
+    private bool Reveal(string path)
+    {
+        try
+        {
+            _opener.Reveal(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Dosya konumu açılamadı: {Path}", path);
+            return false;
+        }
+    }
+
+    private bool Copy(IClipboardService clipboard, string path)
+    {
+        try
+        {
+            clipboard.SetText(path);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Yol panoya yazılamadı: {Path}", path);
+            return false;
         }
     }
 

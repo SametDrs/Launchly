@@ -43,7 +43,7 @@ public sealed class ProgramsPluginTests : IDisposable
             : @"C:\Apps\" + Path.GetFileNameWithoutExtension(lnk) + ".exe";
 
     private ProgramsPlugin CreatePlugin(ProgramScanner scanner, Action<string>? launch = null) =>
-        new(NullLogger.Instance, CachePath, scanner, launch ?? (_ => { }));
+        new(NullLogger.Instance, CachePath, scanner, new FakeProgramLauncher(launch));
 
     private static async Task<IReadOnlyList<Result>> Query(ProgramsPlugin plugin, string text) =>
         await plugin.QueryAsync(new Query(text, string.Empty, text), CancellationToken.None);
@@ -130,7 +130,7 @@ public sealed class ProgramsPluginTests : IDisposable
             MakeLnk(root, n);
         }
 
-        var plugin = new ProgramsPlugin(NullLogger.Instance, CachePath, new ProgramScanner([root], Resolver()), _ => { }, new Settings { MaxResults = 2 });
+        var plugin = new ProgramsPlugin(NullLogger.Instance, CachePath, new ProgramScanner([root], Resolver()), new FakeProgramLauncher(), new Settings { MaxResults = 2 });
         await plugin.InitAsync(new PluginContext(_dir));
         await plugin.RefreshTask;
 
@@ -385,7 +385,7 @@ public sealed class ProgramsPluginTests : IDisposable
             entered.Set();
             release.Wait(TimeSpan.FromSeconds(10));
             return Resolver()(lnk);
-        }), _ => { });
+        }), new FakeProgramLauncher());
         return (plugin, entered, release);
     }
 
