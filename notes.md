@@ -33,6 +33,11 @@ Kullanıcı kurulu uygulamayı test etti; aşağıdaki sekiz madde ve alınan ka
 - `Ctrl+Shift+Enter`: menü açmadan yönetici olarak çalıştır. `09`'a eklendi.
 - Madde 3 kök nedeni doğrulandı: `ProgramScanner` yalnızca iki Başlat Menüsü klasöründeki `*.lnk` dosyalarını tarıyor.
 
+### Logo seçimi (2026-11-11)
+
+- Üç aday üretildi (`artifacts/logo-adaylari/`). Seçilen: **C — "L" + chevron** (`C-L-chevron.jpg`): koyu lacivert zemin, yatay çizgisi komut imleci gibi biten "L", mavi–camgöbeği geçiş.
+- Görselde köşeler saydam değil; `.ico` üretiminde yuvarlak köşe dışı kırpılacak. Görev `11`'in ön koşulu bu dosya.
+
 ### Görev sırası
 
 1. `08` Program keşfi + kullanım kaydı (madde 3, 4, 8)
