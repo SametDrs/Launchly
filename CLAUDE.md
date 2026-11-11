@@ -28,6 +28,6 @@ Launchly/
 - Repo: https://github.com/SametDrs/Launchly (public). Mimari plan: `C:\Users\samet\.claude\plans\https-github-com-flow-launcher-flow-laun-smooth-wozniak.md`
 
 ## Görevler
-- Aşama aşama görev dosyaları `tasks/` altında: `01-iskelet`, `02-pencere`, `03-sorgu-cekirdegi`, `04-programs`, `05-websearch`, `06-yardimcilar`, `07-ayarlar-tray`.
+- Aşama aşama görev dosyaları `tasks/` altında: `01-iskelet`, `02-pencere`, `03-sorgu-cekirdegi`, `04-programs`, `05-websearch`, `06-yardimcilar`, `07-ayarlar-tray`, `08-program-kesfi-kullanim`, `09-actions`, `10-ozel-arama`, `11-logo-tema-ayarlar`.
 - Her `/goal` tek görev dosyasını okuyup bitirir; bağımlılık sırası dosyanın başında yazar.
 - Görev bitince: `backlog-log.md` en üste tek satır kayıt, yarım kalırsa `backlog.md`'ye kayıt.
