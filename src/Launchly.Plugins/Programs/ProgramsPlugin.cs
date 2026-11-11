@@ -8,15 +8,25 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Launchly.Plugins.Programs;
 
-/// <summary>Start Menu uygulamalarını bulur, ikonlarıyla listeler ve açar.</summary>
+/// <summary>
+/// Start Menu kısayollarını ve <c>shell:AppsFolder</c> uygulamalarını (Store/MSIX dahil) bulur, ikonlarıyla listeler ve açar.
+/// Boş kutuda en çok kullanılanları (yoksa başlangıç listesini) gösterir; aramada kullanım puanı sıralamaya katılır.
+/// </summary>
 public sealed class ProgramsPlugin : IPlugin, IDisposable
 {
     public const string PluginId = "launchly.programs";
     private const int MaxReturned = 50;
 
+    /// <summary>Kullanım bonusu üst sınırı: StringMatcher bantları 100 puan aralıklı, bonus bant atlatmaz.</summary>
+    internal const int MaxUsageBonus = 50;
+
     private readonly ILogger _logger;
     private readonly JsonStorage<ProgramCache> _cacheStorage;
     private readonly ProgramScanner _scanner;
+    private readonly IAppsFolderSource _appsFolder;
+    private readonly ProgramUsageStore _usage;
+    private readonly bool _ownsUsage;
+    private readonly Func<string?> _defaultBrowser;
     private readonly Settings? _settings;
     private readonly CancellationTokenSource _shutdown = new();
     private readonly IconLoader _icons = new();
@@ -25,24 +35,41 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
     private volatile ProgramEntry[] _entries = [];
     private int _disposed;
 
-    /// <summary>DI için: gerçek Start Menu klasörleri ve <c>%AppData%\Launchly\cache\programs.json</c>.</summary>
-    public ProgramsPlugin(ILogger<ProgramsPlugin> logger, Settings settings)
+    /// <summary>DI için: gerçek Start Menu klasörleri + AppsFolder, <c>%AppData%\Launchly\cache\programs.json</c>.</summary>
+    public ProgramsPlugin(ILogger<ProgramsPlugin> logger, Settings settings, ProgramUsageStore usage)
         : this(
             logger,
             Path.Combine(DataLocation.RoamingDirectory, "cache", "programs.json"),
             new ProgramScanner(ProgramScanner.DefaultRoots(), logger: logger),
-            LaunchShortcut,
-            settings)
+            LaunchShell,
+            settings,
+            new AppsFolderScanner(),
+            usage,
+            DefaultBrowser.GetExecutablePath)
     {
     }
 
-    internal ProgramsPlugin(ILogger logger, string cachePath, ProgramScanner scanner, Action<string> launch, Settings? settings = null)
+    /// <param name="usage">Verilmezse önbelleğin yanında (<c>usage.json</c>) eklentiye ait bir kayıt açılır ve Dispose'da kapatılır.</param>
+    /// <param name="defaultBrowser">Varsayılan tarayıcı exe yolu; verilmezse tarayıcı başlangıç listesinde yoktur.</param>
+    internal ProgramsPlugin(
+        ILogger logger,
+        string cachePath,
+        ProgramScanner scanner,
+        Action<string> launch,
+        Settings? settings = null,
+        IAppsFolderSource? appsFolder = null,
+        ProgramUsageStore? usage = null,
+        Func<string?>? defaultBrowser = null)
     {
         _settings = settings;
         _logger = logger ?? NullLogger.Instance;
         _cacheStorage = new JsonStorage<ProgramCache>(cachePath, _logger);
         _scanner = scanner;
         _launch = launch;
+        _appsFolder = appsFolder ?? EmptyAppsFolderSource.Instance;
+        _ownsUsage = usage is null;
+        _usage = usage ?? new ProgramUsageStore(Path.Combine(Path.GetDirectoryName(Path.GetFullPath(cachePath))!, "usage.json"), logger: _logger);
+        _defaultBrowser = defaultBrowser ?? (() => null);
     }
 
     public PluginMetadata Metadata { get; } = new()
@@ -58,12 +85,15 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
 
     internal int Count => _entries.Length;
 
+    internal IReadOnlyList<ProgramEntry> Entries => _entries;
+
     public Task InitAsync(PluginContext context)
     {
         // Önbellek hızlı yüklenir; asıl tarama arka planda yapılır, açılışı geciktirmez.
         try
         {
-            _entries = _cacheStorage.Load().Programs.ToArray();
+            // v1 önbellekte Kind/AppUserModelId yoktur: Shortcut ve "" olur. İlk tarama dosyayı v2 olarak yeniden yazar.
+            _entries = ProgramCatalog.Sanitize(_cacheStorage.Load().Programs);
         }
         catch (Exception ex)
         {
@@ -75,7 +105,10 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
         return Task.CompletedTask;
     }
 
-    /// <summary>Uygulama kapanırken arka plan taramasını iptal eder; yarım tarama önbelleğe yazılmaz.</summary>
+    /// <summary>
+    /// Uygulama kapanırken arka plan taramasını iptal eder (yarım tarama önbelleğe yazılmaz) ve bekleyen kullanım
+    /// yazımını bir kez, sınırlı süre bekleyerek bitirir. Sonra gelen açılışlar kaydedilmez.
+    /// </summary>
     public void Dispose()
     {
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
@@ -91,55 +124,171 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
         {
         }
 
+        if (_ownsUsage)
+        {
+            _usage.Dispose();
+        }
+        else
+        {
+            _usage.Flush();   // paylaşılan tekil kayıt: DI kapatır; burada yalnızca bekleyen yazım biter
+        }
+
         // _shutdown Dispose edilmez: tarama iş parçacığı token'ı hâlâ kullanıyor olabilir (yalnızca bellek, yönetilmeyen kaynak yok).
     }
 
     public Task<IReadOnlyList<Result>> QueryAsync(Query query, CancellationToken cancellationToken)
     {
         var entries = _entries;
+
+        // İkon yüklemek pahalı: yalnızca listede gösterilebilecek kadar (Settings.MaxResults) sonuç üretilir.
+        var limit = _settings is null ? MaxReturned : Math.Clamp(_settings.MaxResults, 1, MaxReturned);
         IEnumerable<(ProgramEntry Entry, int Score)> scored;
 
         if (string.IsNullOrWhiteSpace(query.Search))
         {
-            // Girdiler tarama sırasında ada göre sıralıdır; eşit puanda sıra korunur.
-            scored = entries.Select(e => (e, 0));
+            limit = Math.Min(Settings.EmptyQueryMaxResults, limit);
+            scored = EmptyQueryList(entries, limit).Select(e => (e, 0));   // sıra korunur (eşit puanda kararlı sıralama)
         }
         else
         {
             scored = entries
                 .Select(e => (Entry: e, Match: StringMatcher.Match(query.Search, e.Name)))
                 .Where(x => x.Match.IsMatch)
-                .Select(x => (x.Entry, x.Match.Score))
+                .Select(x => (x.Entry, Score: x.Match.Score + UsageBonus(x.Entry.Id)))
                 .OrderByDescending(x => x.Score)
                 .ThenBy(x => x.Entry.Name, StringComparer.CurrentCultureIgnoreCase);
         }
 
-        // İkon yüklemek pahalı: yalnızca listede gösterilebilecek kadar (Settings.MaxResults) sonuç üretilir.
-        var limit = _settings is null ? MaxReturned : Math.Clamp(_settings.MaxResults, 1, MaxReturned);
         var results = new List<Result>();
         foreach (var (entry, score) in scored.Take(limit))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var path = entry.ShortcutPath;
+            var captured = entry;
             results.Add(new Result
             {
                 Title = entry.Name,
                 SubTitle = entry.TargetPath,
                 Score = score,
                 TypeLabel = "Application",
-                IconImage = _icons.Get(path),
-                Action = () => Task.FromResult(TryLaunch(path)),
+                IconImage = IconFor(entry),
+                Action = () => Task.FromResult(TryLaunch(captured)),
             });
         }
 
         return Task.FromResult<IReadOnlyList<Result>>(results);
     }
 
+    /// <summary>Arama bonusu: <c>min(50, round(Frecency x 10))</c>.</summary>
+    internal int UsageBonus(string id)
+    {
+        var frecency = _usage.Frecency(id);
+        return frecency <= 0 ? 0 : (int)Math.Min(MaxUsageBonus, Math.Round(frecency * 10, MidpointRounding.AwayFromZero));
+    }
+
+    /// <summary>
+    /// Boş kutu: önce kullanım kaydındakiler (frecency azalan; artık bulunmayan kimlik atlanır), sonra kalan yer
+    /// başlangıç listesiyle dolar (zaten listede olan atlanır). Kayıt yoksa yalnızca başlangıç listesi.
+    /// </summary>
+    private List<ProgramEntry> EmptyQueryList(ProgramEntry[] entries, int limit)
+    {
+        var starters = StarterApps.Resolve(entries, _defaultBrowser);
+        var byId = new Dictionary<string, ProgramEntry>(StringComparer.OrdinalIgnoreCase);
+        foreach (var e in entries)
+        {
+            byId.TryAdd(e.Id, e);
+        }
+
+        foreach (var s in starters)
+        {
+            byId.TryAdd(s.Id, s);   // Command yedekleri taranmaz; kayıttaki "cmd:" kimlikleri buradan bulunur
+        }
+
+        var list = new List<ProgramEntry>(limit);
+        var added = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var id in _usage.TopIds(int.MaxValue))
+        {
+            if (list.Count >= limit)
+            {
+                break;
+            }
+
+            if (byId.TryGetValue(id, out var entry) && added.Add(entry.Id))
+            {
+                list.Add(entry);
+            }
+        }
+
+        foreach (var s in starters)
+        {
+            if (list.Count >= limit)
+            {
+                break;
+            }
+
+            if (added.Add(s.Id))
+            {
+                list.Add(s);
+            }
+        }
+
+        return list;
+    }
+
+    private System.Windows.Media.ImageSource? IconFor(ProgramEntry entry) => entry.Kind switch
+    {
+        ProgramKind.AppsFolder => _icons.GetForParsingName(entry.AppUserModelId),
+        ProgramKind.Command => CommandIconPath(entry.ShortcutPath) is { } path ? _icons.Get(path) : null,
+        _ => _icons.Get(entry.ShortcutPath),
+    };
+
+    // "notepad.exe" -> System32/Windows altındaki gerçek dosya; "ms-settings:" gibi protokollerin ikonu yok (harf karosu).
+    private static string? CommandIconPath(string command)
+    {
+        if (command.Length == 0 || command.EndsWith(':'))
+        {
+            return null;
+        }
+
+        if (Path.IsPathRooted(command))
+        {
+            return command;
+        }
+
+        foreach (var dir in new[] { Environment.SystemDirectory, Environment.GetFolderPath(Environment.SpecialFolder.Windows) })
+        {
+            var candidate = Path.Combine(dir, command);
+            if (File.Exists(candidate))
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
     private void RefreshCore(CancellationToken cancellationToken)
     {
         try
         {
-            var scanned = _scanner.Scan(cancellationToken);
+            var lnk = _scanner.Scan(cancellationToken);
+
+            IReadOnlyList<(string ParsingName, string DisplayName)> apps;
+            try
+            {
+                apps = _appsFolder.Enumerate(cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                // AppsFolder tek başına bozulursa .lnk sonuçlarıyla devam edilir.
+                SafeLog(l => l.LogWarning(ex, "AppsFolder taranamadı; yalnızca Start Menu kısayolları kullanılıyor"));
+                apps = [];
+            }
+
+            var merged = ProgramCatalog.Merge(lnk, apps);
             int kept;
             lock (_saveGate)
             {
@@ -147,21 +296,22 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
                 cancellationToken.ThrowIfCancellationRequested();
 
                 // Boş tarama (kök yok, hepsi hata verdi vb.) dolu listenin/önbelleğin üzerine yazılmaz.
-                kept = scanned.Count == 0 ? _entries.Length : 0;
+                kept = merged.Count == 0 ? _entries.Length : 0;
                 if (kept == 0)
                 {
-                    _entries = scanned.ToArray();
-                    _cacheStorage.Save(new ProgramCache { ScannedAtUtc = DateTime.UtcNow, Programs = scanned });
+                    _entries = merged.ToArray();
+                    _cacheStorage.Save(new ProgramCache { ScannedAtUtc = DateTime.UtcNow, Programs = merged });
                 }
             }
 
-            if (scanned.Count == 0)
+            if (merged.Count == 0)
             {
                 SafeLog(l => l.LogWarning("Programs taraması 0 uygulama buldu; mevcut liste korundu ({Kept} uygulama)", kept));
             }
             else
             {
-                SafeLog(l => l.LogInformation("Programs taraması bitti: {Count} uygulama", scanned.Count));
+                SafeLog(l => l.LogInformation(
+                    "Programs taraması bitti: {Count} uygulama ({Lnk} kısayol, {Apps} AppsFolder öğesi)", merged.Count, lnk.Count, apps.Count));
             }
         }
         catch (OperationCanceledException)
@@ -192,20 +342,36 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
         }
     }
 
-    private bool TryLaunch(string path)
+    private bool TryLaunch(ProgramEntry entry)
     {
+        var path = entry.LaunchPath;
         try
         {
             _launch(path);
-            return true;
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Uygulama açılamadı: {Path}", path);
+            SafeLog(l => l.LogError(ex, "Uygulama açılamadı: {Path}", path));
             return false;
         }
+
+        // Yalnızca başarılı açılış sayılır. Kayıt belleği günceller; disk yazımı arka planda (debounce).
+        if (Volatile.Read(ref _disposed) == 0)
+        {
+            try
+            {
+                _usage.RecordLaunch(entry.Id);
+            }
+            catch (Exception ex)
+            {
+                SafeLog(l => l.LogWarning(ex, "Kullanım kaydı güncellenemedi: {Id}", entry.Id));
+            }
+        }
+
+        return true;
     }
 
-    private static void LaunchShortcut(string path) =>
+    /// <summary>.lnk yolu, <c>shell:AppsFolder\&lt;AUMID&gt;</c> ya da komut; kabuk (ShellExecute) açar.</summary>
+    private static void LaunchShell(string path) =>
         Process.Start(new ProcessStartInfo(path) { UseShellExecute = true })?.Dispose();
 }

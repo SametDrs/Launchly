@@ -158,6 +158,8 @@ public partial class App : Application
         services.AddSingleton(sp => sp.GetRequiredService<JsonStorage<Settings>>().Load()
             .Normalize(sp.GetRequiredService<ILogger<Settings>>()));
         // Dahili eklentiler (IPlugin); 05-06 görevleri buraya AddSingleton<IPlugin, ...>() ile ekler.
+        // Kullanım kaydı tekil: eklentiden önce oluşur, DI kapanışta eklentiden sonra Dispose eder (son yazım).
+        services.AddSingleton<ProgramUsageStore>();
         services.AddSingleton<IPlugin, ProgramsPlugin>();
         services.AddSingleton<IUrlOpener, ShellUrlOpener>();
         services.AddSingleton<IPlugin, WebSearchPlugin>();

@@ -16,11 +16,15 @@ internal sealed class FakePlugin : IPlugin
         string[] keywords,
         Func<Query, CancellationToken, Task<IReadOnlyList<Result>>> handler,
         int searchDelayMs = 0,
-        Func<Task>? init = null)
+        Func<Task>? init = null,
+        bool handlesEmptyQuery = false)
     {
         _handler = handler;
         InitHandler = init;
-        Metadata = new PluginMetadata { Id = id, Name = id, ActionKeywords = keywords, SearchDelayMs = searchDelayMs };
+        Metadata = new PluginMetadata
+        {
+            Id = id, Name = id, ActionKeywords = keywords, SearchDelayMs = searchDelayMs, HandlesEmptyQuery = handlesEmptyQuery,
+        };
     }
 
     public PluginMetadata Metadata { get; }

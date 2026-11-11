@@ -181,7 +181,8 @@ public static class StringMatcher
 
     private static int[] Range(int start, int count) => Enumerable.Range(start, count).ToArray();
 
-    private static string Fold(string s) => string.Create(s.Length, s, static (span, src) =>
+    /// <summary>Eşleştiricinin karşılaştırma biçimi: küçük harf, Türkçe harfler katlanmış (ı/İ -> i, ç -> c ...).</summary>
+    public static string Fold(string s) => string.Create(s.Length, s, static (span, src) =>
     {
         for (var i = 0; i < src.Length; i++)
         {

@@ -395,6 +395,40 @@ public class PluginManagerTests
     }
 
     [Fact]
+    public async Task EmptyQuery_IsLimitedToSix_TypedQueryToMaxResults()
+    {
+        var plugin = new FakePlugin("p", ["*"], (_, _) =>
+            Results(Enumerable.Range(1, 20).Select(i => R($"r{i}", i)).ToArray()), handlesEmptyQuery: true);
+        using var manager = CreateManager([plugin], new Settings { MaxResults = 8 });
+        await manager.InitializeAsync();
+        var empty = new PublishLog();
+        var typed = new PublishLog();
+
+        await manager.QueryAsync(string.Empty, empty.Add);
+        await manager.QueryAsync("x", typed.Add);
+
+        Assert.Equal(Settings.EmptyQueryMaxResults, empty.Last.Length);
+        Assert.All(empty.Publishes, p => Assert.True(p.Length <= 6));
+        Assert.Equal(new[] { "r20", "r19", "r18", "r17", "r16", "r15" }, empty.Last);   // en yüksek puanlılar
+        Assert.Equal(8, typed.Last.Length);
+        Assert.All(typed.Publishes, p => Assert.True(p.Length <= 8));
+    }
+
+    [Fact]
+    public async Task EmptyQuery_MaxResultsBelowSix_UsesMaxResults()
+    {
+        var plugin = new FakePlugin("p", ["*"], (_, _) =>
+            Results(Enumerable.Range(1, 20).Select(i => R($"r{i}", i)).ToArray()), handlesEmptyQuery: true);
+        using var manager = CreateManager([plugin], new Settings { MaxResults = 4 });
+        await manager.InitializeAsync();
+        var log = new PublishLog();
+
+        await manager.QueryAsync("   ", log.Add);
+
+        Assert.Equal(4, log.Last.Length);
+    }
+
+    [Fact]
     public async Task EqualScores_KeepArrivalOrder()
     {
         var plugin = new FakePlugin("p", ["*"], (_, _) => Results(R("one"), R("two"), R("three")));

@@ -17,7 +17,10 @@ public sealed class Settings
     /// <summary>Pencere arka planı: None (düz koyu), Mica veya Acrylic. Desteklenmiyorsa düz renge düşer.</summary>
     public BackdropType Backdrop { get; set; } = BackdropType.Mica;
 
-    /// <summary>Gösterilecek en fazla sonuç sayısı.</summary>
+    /// <summary>Kutu boşken (ana ekran listesi) gösterilecek en fazla sonuç. Sabittir, ayar dosyasına yazılmaz.</summary>
+    public const int EmptyQueryMaxResults = 6;
+
+    /// <summary>Gösterilecek en fazla sonuç sayısı (yazarken; boş kutuda ayrıca <see cref="EmptyQueryMaxResults"/>).</summary>
     public int MaxResults { get; set; } = 8;
 
     /// <summary>Kullanıcının kapattığı eklentilerin kimlikleri (<c>PluginMetadata.Id</c>).</summary>

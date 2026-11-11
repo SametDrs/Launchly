@@ -245,6 +245,8 @@ public sealed class ProgramsPluginTests : IDisposable
         Assert.DoesNotContain(results, r => r.Title == "Notepad");
     }
 
+    // 08: boş kutu artık "tümü alfabetik" değil; kayıt yokken başlangıç listesi (en çok 6, tablo sırası) gelir.
+    // Ad korunur (görev dosyası bu testin silinmemesini ister); sınadığı şey boş sorgu listesinin sırası.
     [Fact]
     public async Task Query_Blank_ListsAllAlphabetically()
     {
@@ -252,7 +254,9 @@ public sealed class ProgramsPluginTests : IDisposable
 
         var results = await Query(plugin, string.Empty);
 
-        Assert.Equal(["alpha", "Mango", "Zebra"], results.Select(r => r.Title));
+        // Tarayıcı çözücüsü yok: 5 başlangıç öğesi, hepsi Command yedeği (taranan girdilerin hiçbiri eşleşmez).
+        Assert.Equal(["Dosya Gezgini", "Ayarlar", "Komut İstemi", "Not Defteri", "Hesap Makinesi"], results.Select(r => r.Title));
+        Assert.DoesNotContain(results, r => r.Title is "alpha" or "Mango" or "Zebra");
     }
 
     [Fact]
@@ -264,10 +268,14 @@ public sealed class ProgramsPluginTests : IDisposable
         Assert.True(plugin.Metadata.HandlesEmptyQuery);
     }
 
+    // 08: ad korunur; boş kutuda Programs artık en çok kullanılanları (önce kayıt, sonra başlangıç listesi) verir.
+    // Sınanan asıl şey aynı: boş sorguda yalnızca HandlesEmptyQuery eklentisi sorulur.
     [Fact]
     public async Task PluginManager_BlankQuery_ShowsProgramsAlphabetical_ButOtherPluginsStayQuiet()
     {
-        var plugin = await InitializedAsync(["Beta", "Alpha"]);
+        string? launched = null;
+        var plugin = await InitializedAsync(["Beta", "Alpha"], p => launched = p);
+        Assert.True(await (await Query(plugin, "beta"))[0].Action!());   // kullanım kaydı: Beta en üste
         var other = new FakePlugin("other", ["*"], (_, _) => Task.FromResult<IReadOnlyList<Result>>([new Result { Title = "x" }]));
         using var manager = new PluginManager(
             [plugin, other], new Settings(), NullLogger<PluginManager>.Instance, Path.Combine(_dir, "plugins"));
@@ -276,8 +284,10 @@ public sealed class ProgramsPluginTests : IDisposable
         await manager.QueryAsync(string.Empty, r => last = r);
 
         Assert.True(manager.HasEmptyQueryPlugins);
-        Assert.Equal(["Alpha", "Beta"], last!.Select(r => r.Title));
+        Assert.Equal(["Beta", "Dosya Gezgini", "Ayarlar", "Komut İstemi", "Not Defteri", "Hesap Makinesi"], last!.Select(r => r.Title));
         Assert.Equal(0, other.QueryCount);
+        Assert.EndsWith("Beta.lnk", launched);
+        plugin.Dispose();
     }
 
     [Fact]
@@ -320,7 +330,9 @@ public sealed class ProgramsPluginTests : IDisposable
         await second.InitAsync(new PluginContext(_dir));
 
         Assert.False(second.RefreshTask.IsCompleted);
-        Assert.Equal(["Alpha", "Beta"], (await Query(second, string.Empty)).Select(r => r.Title));
+        Assert.Equal(["Alpha"], (await Query(second, "alpha")).Select(r => r.Title));
+        Assert.Equal(["Beta"], (await Query(second, "beta")).Select(r => r.Title));
+        Assert.Equal(2, second.Count);
 
         release.Set();
         await second.RefreshTask;

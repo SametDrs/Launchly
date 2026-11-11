@@ -142,7 +142,8 @@ public sealed class PluginManager : IDisposable
             var query = BuildQuery(raw);
             var plugins = SelectPlugins(query);
 
-            if (string.IsNullOrWhiteSpace(query.Raw))
+            var emptyQuery = string.IsNullOrWhiteSpace(query.Raw);
+            if (emptyQuery)
             {
                 // Kutu boş: yalnızca açıkça isteyen eklentiler çalışır (ör. uygulama listesi).
                 plugins = plugins.Where(p => p.Metadata.HandlesEmptyQuery).ToList();
@@ -159,7 +160,7 @@ public sealed class PluginManager : IDisposable
             _ = Task.WhenAll(producers).ContinueWith(
                 _ => channel.Writer.TryComplete(), CancellationToken.None, TaskContinuationOptions.None, TaskScheduler.Default);
 
-            await ConsumeAsync(channel.Reader, cts, publish).ConfigureAwait(false);
+            await ConsumeAsync(channel.Reader, cts, publish, emptyQuery).ConfigureAwait(false);
         }
         catch (OperationCanceledException)
         {
@@ -182,7 +183,7 @@ public sealed class PluginManager : IDisposable
         CancelCurrent();
     }
 
-    private async Task ConsumeAsync(ChannelReader<Result[]> reader, CancellationTokenSource cts, Action<IReadOnlyList<Result>, bool> publish)
+    private async Task ConsumeAsync(ChannelReader<Result[]> reader, CancellationTokenSource cts, Action<IReadOnlyList<Result>, bool> publish, bool emptyQuery)
     {
         var token = cts.Token;
         var all = new List<Result>();
@@ -197,7 +198,7 @@ public sealed class PluginManager : IDisposable
             Drain(reader, all);
 
             // Kanal tamamlandı ve boşaldıysa (tüm eklentiler döndü) bu yayın sondur.
-            var snapshot = Sort(all);
+            var snapshot = Sort(all, emptyQuery);
             var isFinal = reader.Completion.IsCompleted;
             if (!PublishIfCurrent(cts, publish, snapshot, isFinal))
             {
@@ -224,8 +225,17 @@ public sealed class PluginManager : IDisposable
         }
     }
 
-    private List<Result> Sort(List<Result> all) =>
-        all.OrderByDescending(r => r.Score).Take(Math.Max(1, _settings.MaxResults)).ToList();
+    /// <summary>Score'a göre (eşitlikte geliş sırası) sıralar; boş sorguda en çok <see cref="Settings.EmptyQueryMaxResults"/> sonuç.</summary>
+    private List<Result> Sort(List<Result> all, bool emptyQuery)
+    {
+        var max = Math.Max(1, _settings.MaxResults);
+        if (emptyQuery)
+        {
+            max = Math.Min(Settings.EmptyQueryMaxResults, max);
+        }
+
+        return all.OrderByDescending(r => r.Score).Take(max).ToList();
+    }
 
     /// <summary>Yalnızca hâlâ güncel sorguysa yayınlar; kilit, iptalle yayının yarışmasını önler.</summary>
     private bool PublishIfCurrent(CancellationTokenSource cts, Action<IReadOnlyList<Result>, bool> publish, IReadOnlyList<Result> results, bool isFinal)

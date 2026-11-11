@@ -6,17 +6,27 @@ namespace Launchly.Plugins.Programs;
 /// <summary>Start Menu klasörlerindeki .lnk dosyalarından uygulama listesi çıkarır.</summary>
 internal sealed class ProgramScanner
 {
-    private static readonly string[] AllowedTargetExtensions = [".exe", ".bat", ".cmd", ".com", ".msc"];
-    private static readonly string[] NoiseWords = ["uninstall", "kaldır", "kaldir"];
-
     private readonly IReadOnlyList<string> _roots;
     private readonly Func<string, string> _resolveTarget;
+    private readonly Func<string, string> _displayName;
     private readonly ILogger _logger;
 
-    public ProgramScanner(IReadOnlyList<string> roots, Func<string, string>? resolveTarget = null, ILogger? logger = null)
+    /// <param name="roots">Taranacak klasörler.</param>
+    /// <param name="resolveTarget">Kısayol hedefi çözücü; varsayılan IShellLink.</param>
+    /// <param name="logger">Atlanan klasör/kısayol uyarıları için.</param>
+    /// <param name="displayName">
+    /// Kısayolun görünen adı; varsayılan kabuk adı (<c>SHGetFileInfo(SHGFI_DISPLAYNAME)</c>, <c>desktop.ini</c> çevirisi dahil).
+    /// Boş dönerse ya da hata verirse dosya adı kullanılır.
+    /// </param>
+    public ProgramScanner(
+        IReadOnlyList<string> roots,
+        Func<string, string>? resolveTarget = null,
+        ILogger? logger = null,
+        Func<string, string>? displayName = null)
     {
         _roots = roots;
         _resolveTarget = resolveTarget ?? ShortcutResolver.ResolveTarget;
+        _displayName = displayName ?? ShellDisplayName.Get;
         _logger = logger ?? NullLogger.Instance;
     }
 
@@ -73,8 +83,8 @@ internal sealed class ProgramScanner
         foreach (var file in files)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            var name = Path.GetFileNameWithoutExtension(file);
-            if (IsNoise(name))
+            var fileName = Path.GetFileNameWithoutExtension(file);
+            if (ProgramCatalog.IsNoise(fileName))
             {
                 continue;
             }
@@ -90,9 +100,15 @@ internal sealed class ProgramScanner
                 continue;
             }
 
-            if (target.Length > 0 && !AllowedTargetExtensions.Contains(Path.GetExtension(target), StringComparer.OrdinalIgnoreCase))
+            if (target.Length > 0 && !ProgramCatalog.AllowedTargetExtensions.Contains(Path.GetExtension(target), StringComparer.OrdinalIgnoreCase))
             {
                 continue;   // belge, klasör, URL vb.
+            }
+
+            var name = DisplayNameOf(file, fileName);
+            if (ProgramCatalog.IsNoise(name))
+            {
+                continue;   // çevirisinde "kaldır" geçen kaldırıcı
             }
 
             if (seen.Add(name + "|" + target))
@@ -108,6 +124,25 @@ internal sealed class ProgramScanner
         }
     }
 
-    private static bool IsNoise(string name) =>
-        NoiseWords.Any(w => name.Contains(w, StringComparison.OrdinalIgnoreCase));
+    private string DisplayNameOf(string file, string fileName)
+    {
+        string name;
+        try
+        {
+            name = _displayName(file)?.Trim() ?? string.Empty;
+        }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            _logger.LogWarning(ex, "Kısayolun görünen adı alınamadı, dosya adı kullanıldı: {Path}", file);
+            return fileName;
+        }
+
+        // .lnk uzantısı kabukta her zaman gizlidir (NeverShowExt); yine de güvence.
+        if (name.EndsWith(".lnk", StringComparison.OrdinalIgnoreCase))
+        {
+            name = name[..^4].TrimEnd();
+        }
+
+        return name.Length > 0 ? name : fileName;
+    }
 }
