@@ -1,4 +1,5 @@
 using Launchly.Core.Plugins;
+using Launchly.Core.Querying;
 using Launchly.Core.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -72,7 +73,8 @@ public sealed class SettingsService
         Language = _live.Language,
     };
 
-    public static bool TryValidate(Settings draft, out string? error)
+    /// <param name="reservedKeywords">Başka eklentilerin anahtar kelimeleri; etkin bir kaynak bunlardan birini alamaz (null: denetlenmez).</param>
+    public static bool TryValidate(Settings draft, out string? error, IReadOnlyCollection<string>? reservedKeywords = null)
     {
         if (!HotkeyParser.TryParse(draft.Hotkey, out _))
         {
@@ -80,18 +82,34 @@ public sealed class SettingsService
             return false;
         }
 
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seen = new HashSet<string>(KeywordComparer.Instance);
+        var reserved = new HashSet<string>(reservedKeywords ?? [], KeywordComparer.Instance);
+        var row = 0;
         foreach (var source in draft.SearchSources)
         {
+            row++;
+            var label = string.IsNullOrWhiteSpace(source.Title) ? $"{row}. satır" : $"{row}. satır (\"{source.Title.Trim()}\")";
             if (!source.TryValidate(out var sourceError))
             {
-                error = $"\"{source.Title}\": {sourceError}";
+                error = $"{label}: {sourceError}";
                 return false;
             }
 
-            if (source.Enabled && !seen.Add(source.ActionKeyword.Trim()))
+            if (!source.Enabled)
             {
-                error = $"\"{source.ActionKeyword}\" anahtar kelimesi birden fazla etkin kaynakta kullanılıyor.";
+                continue;
+            }
+
+            var keyword = source.ActionKeyword.Trim();
+            if (reserved.Contains(keyword))
+            {
+                error = $"{label}: \"{keyword}\" anahtar kelimesi başka bir eklentiye ait; farklı bir kelime seçin.";
+                return false;
+            }
+
+            if (!seen.Add(keyword))
+            {
+                error = $"{label}: \"{keyword}\" anahtar kelimesi birden fazla etkin kaynakta kullanılıyor.";
                 return false;
             }
         }
@@ -102,7 +120,7 @@ public sealed class SettingsService
 
     public SettingsApplyResult Apply(Settings draft)
     {
-        if (!TryValidate(draft, out var validationError))
+        if (!TryValidate(draft, out var validationError, _plugins.ReservedKeywords(SearchSource.WebSearchPluginId)))
         {
             return new SettingsApplyResult(false, validationError);
         }

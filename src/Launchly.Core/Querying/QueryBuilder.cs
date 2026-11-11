@@ -6,7 +6,7 @@ namespace Launchly.Core.Querying;
 public static class QueryBuilder
 {
     /// <summary>
-    /// İlk kelime <paramref name="activeKeywords"/> içindeyse (büyük/küçük harf duyarsız)
+    /// İlk kelime <paramref name="activeKeywords"/> içindeyse (büyük/küçük harf ve Türkçe i duyarsız, bkz. <see cref="KeywordComparer"/>)
     /// ve arkasından en az bir boşluk geliyorsa <see cref="Query.ActionKeyword"/> olur ve kalanı <see cref="Query.Search"/> olur.
     /// Tek başına yazılan kelime ("f") anahtar kelime sayılmaz. Değilse anahtar kelime boştur ve tüm metin aranır.
     /// </summary>
@@ -31,7 +31,7 @@ public static class QueryBuilder
         var first = text[..end];
         if (end < text.Length &&
             first != PluginMetadata.GlobalKeyword &&
-            activeKeywords.Contains(first, StringComparer.OrdinalIgnoreCase))
+            activeKeywords.Contains(first, KeywordComparer.Instance))
         {
             return new Query(raw, first, text[end..].Trim());
         }

@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace Launchly.Core;
 
 /// <summary>Web arama kaynağı (ör. YouTube). <c>settings.json</c>'da saklanır; ayar penceresinden düzenlenir.</summary>
@@ -20,6 +22,13 @@ public sealed class SearchSource
 
     public bool Enabled { get; set; } = true;
 
+    /// <summary>WebSearch eklentisinin kimliği (Core eklentiye bağlı değildir; ayar doğrulaması kendi kaynaklarını ayırt etmek için kullanır).</summary>
+    public const string WebSearchPluginId = "launchly.websearch";
+
+    /// <summary>Şablonda <c>{q}</c> varsa arama yapar; yoksa anahtar kelime siteyi doğrudan açar. Hesaplanır, JSON'a yazılmaz.</summary>
+    [JsonIgnore]
+    public bool IsSearchable => (UrlTemplate ?? string.Empty).Contains(Placeholder, StringComparison.Ordinal);
+
     /// <summary>JSON'dan gelen null metinleri boşa çevirir.</summary>
     internal void Normalize()
     {
@@ -31,7 +40,7 @@ public sealed class SearchSource
 
     public SearchSource Clone() => (SearchSource)MemberwiseClone();
 
-    /// <summary>Kaynağı doğrular: başlık, tek kelimelik anahtar kelime ve http(s) + <c>{q}</c> içeren şablon.</summary>
+    /// <summary>Kaynağı doğrular: başlık, tek kelimelik anahtar kelime ve http(s) adres (<c>{q}</c> isteğe bağlı).</summary>
     public bool TryValidate(out string? error)
     {
         if (string.IsNullOrWhiteSpace(Title))
@@ -42,14 +51,11 @@ public sealed class SearchSource
         {
             error = "Anahtar kelime boş olamaz, boşluk içeremez ve \"*\" olamaz.";
         }
-        else if (!UrlTemplate.Contains(Placeholder, StringComparison.Ordinal))
+        else if (!Uri.TryCreate((UrlTemplate ?? string.Empty).Trim().Replace(Placeholder, "x", StringComparison.Ordinal), UriKind.Absolute, out var uri)
+                 || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
+                 || uri.Host.Length == 0)
         {
-            error = $"Adres şablonu {Placeholder} içermeli (ör. https://site.com/search?q={Placeholder}).";
-        }
-        else if (!Uri.TryCreate(UrlTemplate.Replace(Placeholder, "x", StringComparison.Ordinal), UriKind.Absolute, out var uri)
-                 || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps))
-        {
-            error = "Adres şablonu http:// veya https:// ile başlayan geçerli bir adres olmalı.";
+            error = "Adres http:// veya https:// ile başlayan geçerli bir adres olmalı (arama için {q} kullanılabilir).";
         }
         else
         {

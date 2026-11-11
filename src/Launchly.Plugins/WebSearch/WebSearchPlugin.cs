@@ -1,4 +1,5 @@
 using Launchly.Core;
+using Launchly.Core.Querying;
 using Launchly.Plugin;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -8,7 +9,7 @@ namespace Launchly.Plugins.WebSearch;
 /// <summary>"youtube beatles" gibi sorgularda ilgili sitede arama yapar.</summary>
 public sealed class WebSearchPlugin : IPlugin
 {
-    public const string PluginId = "launchly.websearch";
+    public const string PluginId = SearchSource.WebSearchPluginId;
     private const string DefaultIcon = ""; // Globe
 
     private readonly Settings _settings;
@@ -30,12 +31,18 @@ public sealed class WebSearchPlugin : IPlugin
     /// <summary>
     /// Anahtar kelimeler ayardaki etkin kaynaklardan her okunuşta türetilir; ayar penceresi (07) kaynakları
     /// değiştirince <c>PluginManager</c> dizini yeniden kurduğunda yeni kelimeler geçerli olur.
+    /// Global anahtar sabittir: "film" gibi yalın kelime (sonda boşluk yok) de siteyi açabilsin diye
+    /// eklenti global sorguda da çağrılır; orada yalnızca sözlük araması yapılır.
     /// </summary>
     public PluginMetadata Metadata => new()
     {
         Id = PluginId,
         Name = "Web Search",
-        ActionKeywords = ActiveSources().Select(s => s.ActionKeyword.Trim()).Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
+        ActionKeywords = ActiveSources(_settings.SearchSources)
+            .Select(s => s.ActionKeyword.Trim())
+            .Distinct(KeywordComparer.Instance)
+            .Append(PluginMetadata.GlobalKeyword)
+            .ToArray(),
     };
 
     public Task InitAsync(PluginContext context)
@@ -51,13 +58,36 @@ public sealed class WebSearchPlugin : IPlugin
 
     public Task<IReadOnlyList<Result>> QueryAsync(Query query, CancellationToken cancellationToken)
     {
-        var source = query.ActionKeyword.Length == 0
-            ? null
-            : ActiveSources().FirstOrDefault(s =>
-                string.Equals(s.ActionKeyword.Trim(), query.ActionKeyword, StringComparison.OrdinalIgnoreCase));
+        cancellationToken.ThrowIfCancellationRequested();
+
+        // Ayar uygulanırken liste yeni bir nesneyle değişir; sorgu boyunca tek başvuru kullanılır.
+        var sources = _settings.SearchSources;
+
+        if (query.ActionKeyword.Length == 0)
+        {
+            // Global yol: yalın "film" yazılıp Enter'a basıldıysa {q}'suz kaynağın sitesi açılır; diğer her şey boş.
+            var bare = query.Search.Trim();
+            if (bare.Length == 0)
+            {
+                return Empty();
+            }
+
+            var site = ActiveSources(sources).FirstOrDefault(s =>
+                !s.IsSearchable && KeywordComparer.Instance.Equals(s.ActionKeyword.Trim(), bare));
+            return site is null ? Empty() : One(OpenSiteResult(site, score: 950));
+        }
+
+        var source = ActiveSources(sources).FirstOrDefault(s =>
+            KeywordComparer.Instance.Equals(s.ActionKeyword.Trim(), query.ActionKeyword));
         if (source is null)
         {
-            return Task.FromResult<IReadOnlyList<Result>>([]);
+            return Empty();
+        }
+
+        if (!source.IsSearchable)
+        {
+            // "film" ve "film xyz": kelimeden sonraki metin yok sayılır.
+            return One(OpenSiteResult(source, score: 1000));
         }
 
         var keyword = source.ActionKeyword.Trim();
@@ -78,7 +108,7 @@ public sealed class WebSearchPlugin : IPlugin
         }
         else
         {
-            var url = SearchUrl.Build(source.UrlTemplate, search);
+            var url = SearchUrl.Build(source.UrlTemplate.Trim(), search);
             result = new Result
             {
                 Title = search,
@@ -91,8 +121,28 @@ public sealed class WebSearchPlugin : IPlugin
             };
         }
 
-        return Task.FromResult<IReadOnlyList<Result>>([result]);
+        return One(result);
     }
+
+    private Result OpenSiteResult(SearchSource source, int score)
+    {
+        var url = source.UrlTemplate.Trim();
+        return new Result
+        {
+            Title = $"{source.Title} sitesini aç",
+            SubTitle = url,
+            Icon = IconOf(source),
+            Score = score,
+            TypeLabel = "Alt+1",
+            AutoComplete = source.ActionKeyword.Trim(),
+            Action = () => Task.FromResult(Open(url)),
+        };
+    }
+
+    private static Task<IReadOnlyList<Result>> Empty() => Task.FromResult<IReadOnlyList<Result>>([]);
+
+    private static Task<IReadOnlyList<Result>> One(Result r) => Task.FromResult<IReadOnlyList<Result>>([r]);
+
 
     private bool Open(string url)
     {
@@ -116,7 +166,7 @@ public sealed class WebSearchPlugin : IPlugin
 
     private static string IconOf(SearchSource s) => string.IsNullOrEmpty(s.Icon) ? DefaultIcon : s.Icon;
 
-    private IEnumerable<SearchSource> ActiveSources() =>
-        (_settings.SearchSources ?? [])
+    private static IEnumerable<SearchSource> ActiveSources(List<SearchSource>? sources) =>
+        (sources ?? [])
             .Where(s => s is not null && s.Enabled && !string.IsNullOrWhiteSpace(s.ActionKeyword) && !string.IsNullOrWhiteSpace(s.UrlTemplate));
 }

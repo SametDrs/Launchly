@@ -18,7 +18,7 @@ public sealed class PluginManager : IDisposable
     private readonly string _dataRoot;
     private readonly object _gate = new();
     private readonly HashSet<string> _failed = new(StringComparer.Ordinal);
-    private Dictionary<string, List<IPlugin>> _byKeyword = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, List<IPlugin>> _byKeyword = new(KeywordComparer.Instance);
     private List<IPlugin> _global = [];
     private CancellationTokenSource? _current;
 
@@ -51,6 +51,21 @@ public sealed class PluginManager : IDisposable
                     .Select(kv => kv.Key)
                     .ToArray();
             }
+        }
+    }
+
+    /// <summary>
+    /// <paramref name="exceptPluginId"/> dışındaki etkin eklentilerin anahtar kelimeleri (global "*" hariç).
+    /// Ayarlarda tanımlanan özel kaynakların bu kelimelerle çakışması reddedilir.
+    /// </summary>
+    public IReadOnlyCollection<string> ReservedKeywords(string exceptPluginId)
+    {
+        lock (_gate)
+        {
+            return _byKeyword
+                .Where(kv => kv.Value.Any(p => IsEnabled(p) && !string.Equals(p.Metadata.Id, exceptPluginId, StringComparison.Ordinal)))
+                .Select(kv => kv.Key)
+                .ToArray();
         }
     }
 
@@ -334,7 +349,7 @@ public sealed class PluginManager : IDisposable
 
     private void RebuildIndex(IEnumerable<IPlugin> plugins)
     {
-        var byKeyword = new Dictionary<string, List<IPlugin>>(StringComparer.OrdinalIgnoreCase);
+        var byKeyword = new Dictionary<string, List<IPlugin>>(KeywordComparer.Instance);
         var global = new List<IPlugin>();
 
         foreach (var plugin in plugins)

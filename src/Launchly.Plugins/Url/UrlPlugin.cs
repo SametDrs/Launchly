@@ -42,9 +42,28 @@ public static partial class UrlDetector
             return false;
         }
 
+        // Şemasız, "www."suz, port/yol/sorgu içermeyen ve son etiketi dosya uzantısı olan girdi dosya adıdır.
+        if (!text.StartsWith("www.", StringComparison.OrdinalIgnoreCase) &&
+            text.IndexOfAny([':', '/', '?', '#']) < 0 &&
+            FileExtensions.Contains(text[(text.LastIndexOf('.') + 1)..]))
+        {
+            return false;
+        }
+
         url = uri.AbsoluteUri;
         return true;
     }
+
+    // Şemasız yazılınca site değil dosya adı sayılan uzantılar ("notes.md", "rapor.pdf"). Gerçek TLD olanlar
+    // (.md, .py, .zip, .mov, .sh) da dahildir: bilinen ve kabul edilen sınırlama; "https://" ya da "www." ile
+    // yazılırsa URL olarak kalır.
+    private static readonly HashSet<string> FileExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "md", "txt", "log", "ini", "cfg", "conf", "json", "xml", "yml", "yaml", "csv", "tsv", "cs", "csproj", "sln",
+        "py", "js", "ts", "tsx", "jsx", "java", "cpp", "h", "sh", "ps1", "bat", "cmd", "exe", "dll", "msi", "iso",
+        "zip", "rar", "7z", "gz", "tar", "png", "jpg", "jpeg", "gif", "bmp", "svg", "webp", "pdf", "doc", "docx",
+        "xls", "xlsx", "ppt", "pptx", "mp3", "wav", "flac", "mp4", "mov", "avi", "mkv", "webm",
+    };
 }
 
 /// <summary>"github.com" veya "https://..." yazılınca "Open URL" sonucu verir.</summary>

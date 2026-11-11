@@ -14,3 +14,5 @@ Projede değişmeyen gerçekler (sabit kararlar, kısıtlar, tanımlar). Değiş
 - DI: `Microsoft.Extensions.Hosting` Generic Host, `App.xaml.cs` içinde kurulur.
 - .NET 9 SDK PATH'te değil: `C:\Users\samet\AppData\Local\Microsoft\dotnet\dotnet.exe` (gerekirse `DOTNET_ROOT` aynı klasör).
 
+- Anahtar kelime eşitliği `KeywordComparer` ile: büyük/küçük harf duyarsız ve i/İ/ı/I aynı harf; QueryBuilder, PluginManager dizini, WebSearch ve ayar doğrulaması aynı karşılaştırıcıyı kullanır.
+- `SearchSource.IsSearchable` ({q} var mı) hesaplanır, JSON'a yazılmaz; `{q}`'suz kaynak anahtar kelimeyle siteyi açar, ek metin yok sayılır.

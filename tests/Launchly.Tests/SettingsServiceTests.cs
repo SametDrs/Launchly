@@ -137,7 +137,9 @@ public sealed class SettingsServiceTests : IDisposable
     }
 
     [Theory]
-    [InlineData("https://maps.example/?q=", "{q}")]
+    [InlineData("", "http")]
+    [InlineData("https://", "http")]
+    [InlineData("maps.example/{q}", "http")]
     [InlineData("ftp://maps.example/{q}", "http")]
     [InlineData("not a url {q}", "http")]
     public void Apply_InvalidTemplate_IsRejected_AndNothingChanges(string template, string errorPart)

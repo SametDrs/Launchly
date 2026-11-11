@@ -9,7 +9,7 @@ namespace Launchly.App.SettingsUi;
 /// <summary>Ayar penceresindeki gizlenen uygulama satırı.</summary>
 public sealed record HiddenProgramItem(string Id, string Name);
 
-/// <summary>Ayar penceresindeki tek web kaynağı satırı (düzenlenebilir).</summary>
+/// <summary>Ayar penceresindeki tek arama kaynağı satırı (düzenlenebilir).</summary>
 public sealed partial class SearchSourceItem : ObservableObject
 {
     [ObservableProperty] private string _title = string.Empty;
@@ -144,7 +144,7 @@ public sealed partial class SettingsViewModel : ObservableObject
         return true;
     }
 
-    public void AddSource() => Sources.Add(new SearchSourceItem());
+    public void AddSource() => Sources.Add(new SearchSourceItem { Enabled = true, UrlTemplate = "https://" });
 
     public void RemoveSource(SearchSourceItem item) => Sources.Remove(item);
 
