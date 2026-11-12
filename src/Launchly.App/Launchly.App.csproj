@@ -11,6 +11,8 @@
     <Version>1.0.0</Version>
     <!-- Logo: tools\make-ico.ps1 ile assets\logo-source.jpg'den üretilir. -->
     <ApplicationIcon>Assets\Launchly.ico</ApplicationIcon>
+    <!-- Kurulum boyutu: yalnızca Türkçe çerçeve kaynakları (İngilizce yerleşik). -->
+    <SatelliteResourceLanguages>tr</SatelliteResourceLanguages>
   </PropertyGroup>
 
   <ItemGroup>
