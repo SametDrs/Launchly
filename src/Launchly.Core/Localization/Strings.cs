@@ -249,7 +249,7 @@ internal static class Strings
         { "sources.title", "Search sources" },
         { "sources.add", "+ Add" },
         { "sources.hint", "If the address contains {q} it searches, otherwise it opens the site." },
-        { "sources.col.enabled", "Enabled" },
+        { "sources.col.enabled", "On" },
         { "sources.col.title", "Title" },
         { "sources.col.keyword", "Keyword" },
         { "sources.col.url", "URL template" },

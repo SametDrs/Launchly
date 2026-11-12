@@ -1,4 +1,4 @@
-# Launchly kurulum dosyasını üretir: artifacts\setup.exe
+# Launchly kurulum dosyasını üretir: artifacts\Launchly-Setup.exe
 $ErrorActionPreference = 'Stop'
 $root = Split-Path $PSScriptRoot -Parent
 $publish = Join-Path $root 'artifacts\publish'

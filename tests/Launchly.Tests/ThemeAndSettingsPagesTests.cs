@@ -509,7 +509,8 @@ public sealed class PluginToggleAndPagesTests : IDisposable
     {
         using var vm = CreateViewModel();
 
-        Assert.StartsWith("1.0.0", vm.AppVersion);
+        var expected = typeof(Launchly.App.SettingsUi.SettingsViewModel).Assembly.GetName().Version!;
+        Assert.StartsWith($"{expected.Major}.{expected.Minor}.{expected.Build}", vm.AppVersion);
     }
 
     [Theory]
