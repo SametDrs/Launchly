@@ -31,6 +31,7 @@ public partial class App : Application
     private TrayIcon? _tray;
     private SingleInstance? _singleInstance;
     private SettingsWindow? _settingsWindow;
+    private BackdropController? _backdrop;
 
     public IServiceProvider Services =>
         _host?.Services ?? throw new InvalidOperationException("Host henüz başlatılmadı.");
@@ -80,8 +81,12 @@ public partial class App : Application
 
         // Tutamak oluşturulur ama pencere gösterilmez: Launchly gizli başlar, kısayolla açılır.
         var hwnd = new WindowInteropHelper(window).EnsureHandle();
-        var applied = WindowBackdrop.Apply(window, settings.Backdrop);
-        Log.Information("Arka plan: istenen {Requested}, uygulanan {Applied}", settings.Backdrop, applied);
+        _backdrop = new BackdropController(
+            settings,
+            Services.GetRequiredService<ILogger<BackdropController>>(),
+            Dispatcher);
+        _backdrop.Attach(window);   // istenen/uygulanan tür ve düşüş nedeni controller'da loglanır
+        var backdrop = _backdrop;
 
         _hotkey = new HotkeyManager();
         _hotkey.Pressed += window.ToggleLauncher;
@@ -93,11 +98,25 @@ public partial class App : Application
             new RegistryAutoStart(),
             Services.GetRequiredService<PluginManager>(),
             Services.GetRequiredService<ILogger<SettingsService>>());
-        settingsService.Applied += s => WindowBackdrop.Apply(window, s.Backdrop);
+        // Uygula: tema açık tüm pencerelere (ana pencere + ayar penceresi) hemen uygulanır.
+        settingsService.Applied += _ => backdrop.ApplyAll();
+
+        var pluginManager = Services.GetRequiredService<PluginManager>();
 
         void OpenSettings()
         {
-            _settingsWindow ??= new SettingsWindow(new SettingsViewModel(settingsService, Services.GetRequiredService<ProgramUsageStore>()));
+            if (_settingsWindow is null)
+            {
+                var viewModel = new SettingsViewModel(
+                    settingsService,
+                    Services.GetRequiredService<ProgramUsageStore>(),
+                    () => pluginManager.Plugins,
+                    WindowBackdrop.Availability,
+                    Services.GetRequiredService<IUrlOpener>());
+                backdrop.AvailabilityChanged += viewModel.RefreshBackdropAvailability;
+                _settingsWindow = new SettingsWindow(viewModel, backdrop);
+            }
+
             _settingsWindow.ShowSettings();
         }
 
@@ -132,6 +151,7 @@ public partial class App : Application
         _hotkey?.Dispose();
         _tray?.Dispose();
         _settingsWindow?.CloseForExit();
+        _backdrop?.Dispose();
         _singleInstance?.Dispose();
 
         if (_host is not null)

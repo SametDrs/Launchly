@@ -120,7 +120,9 @@ public sealed class SettingsService
 
     public SettingsApplyResult Apply(Settings draft)
     {
-        if (!TryValidate(draft, out var validationError, _plugins.ReservedKeywords(SearchSource.WebSearchPluginId)))
+        // Ayrılmış kelimeler taslaktaki eklenti anahtarlarına göre: aynı Uygula'da kapatılan eklentinin kelimesi serbesttir.
+        var reserved = _plugins.ReservedKeywords(SearchSource.WebSearchPluginId, draft.DisabledPlugins ?? []);
+        if (!TryValidate(draft, out var validationError, reserved))
         {
             return new SettingsApplyResult(false, validationError);
         }
@@ -169,6 +171,9 @@ public sealed class SettingsService
         _live.HideOnFocusLost = draft.HideOnFocusLost;
         _live.StartOnSystemStartup = draft.StartOnSystemStartup;
         _live.SearchSources = draft.SearchSources.Select(s => s.Clone()).ToList();
+        // Yeni liste atanır, yerinde değiştirilmez: PluginManager.IsEnabled sorgu iş parçacığında eski listeyi okuyabilir.
+        // Bilinmeyen Id'ler (kaldırılmış eklenti) olduğu gibi korunur.
+        _live.DisabledPlugins = (draft.DisabledPlugins ?? []).Where(id => id is not null).Distinct(StringComparer.Ordinal).ToList();
 
         try
         {

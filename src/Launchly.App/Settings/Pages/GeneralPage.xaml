@@ -1,0 +1,20 @@
+<UserControl x:Class="Launchly.App.SettingsUi.Pages.GeneralPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+        <StackPanel Margin="28,22,28,20">
+            <TextBlock Text="Genel" Style="{StaticResource PageTitleStyle}" />
+
+            <TextBlock Text="Kısayol" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,4" />
+            <TextBlock Text="Kutuya tıklayıp yeni tuş birleşimine basın (Ctrl, Alt ya da Win'den en az biri gerekir)."
+                       Style="{StaticResource HintTextStyle}" Margin="0,0,0,8" />
+            <TextBox x:Name="HotkeyBox" Width="220" HorizontalAlignment="Left" IsReadOnly="True"
+                     Style="{StaticResource FieldTextBoxStyle}" Text="{Binding Hotkey, Mode=OneWay}"
+                     PreviewKeyDown="OnHotkeyKeyDown" AutomationProperties.Name="Kısayol" />
+
+            <TextBlock Text="Davranış" Style="{StaticResource SectionTitleStyle}" Margin="0,24,0,8" />
+            <CheckBox Content="Odak kaybolunca pencereyi gizle" IsChecked="{Binding HideOnFocusLost}" Style="{StaticResource DarkCheckBoxStyle}" />
+            <CheckBox Content="Windows açılışında başlat" IsChecked="{Binding StartOnSystemStartup}" Style="{StaticResource DarkCheckBoxStyle}" Margin="0,8,0,0" />
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

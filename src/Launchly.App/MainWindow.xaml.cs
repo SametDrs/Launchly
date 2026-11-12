@@ -1,6 +1,8 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Launchly.App.Interop;
+using Launchly.App.Tray;
 using Launchly.App.ViewModels;
 using Launchly.Core;
 
@@ -17,6 +19,11 @@ public partial class MainWindow : Window
         _settings = settings;
         DataContext = viewModel;
         InitializeComponent();
+
+        // Çerçevesiz pencerede DWM Mica/Acrylic çizmez (WS_CAPTION yok); tutamak oluşmadan pencere stili hazırlanır.
+        WindowBackdrop.PrepareBorderless(this);
+        // Alt+Tab ve görev değiştiricide görünen simge.
+        Icon = new System.Windows.Media.Imaging.BitmapImage(new Uri(TrayIcon.IconUri));
 
         Deactivated += (_, _) =>
         {

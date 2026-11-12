@@ -56,7 +56,7 @@ public class HotkeyStrongModifierTests
 public class SettingsBackdropTests
 {
     [Fact]
-    public void Backdrop_DefaultsToMica_AndSerializesAsString()
+    public void Backdrop_DefaultsToAcrylic_AndSerializesAsString()
     {
         var dir = Path.Combine(Path.GetTempPath(), "launchly-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(dir);
@@ -65,11 +65,11 @@ public class SettingsBackdropTests
             var path = Path.Combine(dir, "settings.json");
             var storage = new JsonStorage<Settings>(path);
             var s = storage.Load();
-            Assert.Equal(BackdropType.Mica, s.Backdrop);
-            s.Backdrop = BackdropType.Acrylic;
+            Assert.Equal(BackdropType.Acrylic, s.Backdrop);
+            s.Backdrop = BackdropType.Mica;
             storage.Save(s);
-            Assert.Contains("\"Acrylic\"", File.ReadAllText(path));
-            Assert.Equal(BackdropType.Acrylic, storage.Load().Backdrop);
+            Assert.Contains("\"Mica\"", File.ReadAllText(path));
+            Assert.Equal(BackdropType.Mica, storage.Load().Normalize().Backdrop);   // v2 dosyasında açık Mica seçimi korunur
         }
         finally
         {

@@ -8,14 +8,18 @@ namespace Launchly.Core;
 /// </summary>
 public sealed class Settings
 {
-    /// <summary>Ayar şeması sürümü; ileride göç (migration) için.</summary>
-    public int Version { get; set; } = 1;
+    /// <summary>Güncel ayar şeması sürümü.</summary>
+    /// <remarks>2: varsayılan tema Mica'dan Acrylic'e geçti (v1 dosyasındaki "Mica" bir kez Acrylic'e çevrilir).</remarks>
+    public const int CurrentVersion = 2;
+
+    /// <summary>Ayar şeması sürümü (göç için). Alanı olmayan dosya güncel sürümle okunur ve göçe girmez.</summary>
+    public int Version { get; set; } = CurrentVersion;
 
     /// <summary>Pencereyi açan kısayol.</summary>
     public string Hotkey { get; set; } = "Alt+Space";
 
     /// <summary>Pencere arka planı: None (düz koyu), Mica veya Acrylic. Desteklenmiyorsa düz renge düşer.</summary>
-    public BackdropType Backdrop { get; set; } = BackdropType.Mica;
+    public BackdropType Backdrop { get; set; } = BackdropType.Acrylic;
 
     /// <summary>Kutu boşken (ana ekran listesi) gösterilecek en fazla sonuç. Sabittir, ayar dosyasına yazılmaz.</summary>
     public const int EmptyQueryMaxResults = 6;
@@ -44,6 +48,8 @@ public sealed class Settings
     /// </summary>
     public Settings Normalize(ILogger? logger = null)
     {
+        Migrate(logger);
+
         DisabledPlugins = (DisabledPlugins ?? []).Where(id => id is not null).ToList();
         SearchSources = SearchSources is null
             ? SearchSource.CreateDefaults()
@@ -62,5 +68,31 @@ public sealed class Settings
 
         Language ??= "tr";
         return this;
+    }
+
+    /// <summary>
+    /// Eski şema sürümlerinden tek seferlik geçiş. Sonuç diske bir sonraki kayıtta (çıkış ya da Uygula) yazılır.
+    /// v1 → v2: "Mica" eski varsayılandı, kullanıcı seçimi sayılmaz ve Acrylic olur; None/Acrylic korunur.
+    /// v2 dosyasındaki Mica açık seçimdir ve korunur.
+    /// </summary>
+    private void Migrate(ILogger? logger)
+    {
+        if (Version >= CurrentVersion)
+        {
+            return;
+        }
+
+        var from = Version;
+        if (Version < 2 && Backdrop == BackdropType.Mica)
+        {
+            Backdrop = BackdropType.Acrylic;
+            logger?.LogInformation("Ayar geçişi v{From} → v{To}: tema Mica (eski varsayılan) → Acrylic", from, CurrentVersion);
+        }
+        else
+        {
+            logger?.LogInformation("Ayar geçişi v{From} → v{To}: tema {Backdrop} korundu", from, CurrentVersion, Backdrop);
+        }
+
+        Version = CurrentVersion;
     }
 }

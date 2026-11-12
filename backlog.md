@@ -9,4 +9,3 @@ Yarıda kalan ve bekleyen işler. Bitmiş iş burada tutulmaz; silinir ve `backl
 - Dosyalar: ilgili yollar
 - Tarih: YYYY-MM-DD
 -->
-

@@ -1,0 +1,29 @@
+<UserControl x:Class="Launchly.App.SettingsUi.Pages.AboutPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+        <StackPanel Margin="28,22,28,20">
+            <TextBlock Text="Hakkında" Style="{StaticResource PageTitleStyle}" />
+
+            <StackPanel Orientation="Horizontal" Margin="0,4,0,0">
+                <Image Source="pack://application:,,,/Assets/Launchly.png" Width="72" Height="72"
+                       RenderOptions.BitmapScalingMode="HighQuality" VerticalAlignment="Center" />
+                <StackPanel Margin="16,0,0,0" VerticalAlignment="Center">
+                    <TextBlock Text="Launchly" FontSize="20" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" />
+                    <TextBlock FontSize="13" Foreground="{StaticResource SubTextBrush}" Margin="0,2,0,0">
+                        <Run Text="Sürüm " /><Run Text="{Binding AppVersion, Mode=OneWay}" />
+                    </TextBlock>
+                    <TextBlock FontSize="13" Foreground="{StaticResource SubTextBrush}" Margin="0,2,0,0"
+                               Text="Hızlı uygulama ve web başlatıcı." />
+                </StackPanel>
+            </StackPanel>
+
+            <TextBlock Text="Kaynak kod" Style="{StaticResource SectionTitleStyle}" Margin="0,24,0,6" />
+            <TextBlock FontSize="13">
+                <Hyperlink Click="OnOpenRepository" Foreground="{StaticResource AccentBrush}" ToolTip="Tarayıcıda aç">
+                    <Run Text="{Binding RepositoryLink, Mode=OneWay}" />
+                </Hyperlink>
+            </TextBlock>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

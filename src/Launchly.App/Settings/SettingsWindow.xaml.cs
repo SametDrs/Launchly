@@ -1,32 +1,42 @@
-using System.Runtime.InteropServices;
+using System.ComponentModel;
 using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Input;
-using System.Windows.Interop;
-using Launchly.Core;
+using Launchly.App.Interop;
+using Launchly.App.SettingsUi.Pages;
 
 namespace Launchly.App.SettingsUi;
 
+/// <summary>
+/// Sol menülü ayar penceresi. Sayfalar bir kez oluşturulup yeniden kullanılır; taslak tek <see cref="SettingsViewModel"/>'de
+/// tutulduğundan sayfa değiştirmek değişiklikleri kaybetmez. Ana pencereyle aynı tema (<see cref="BackdropController"/>).
+/// </summary>
 public partial class SettingsWindow : Window
 {
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmSetWindowAttribute(IntPtr hwnd, int attr, ref int value, int size);
-
     private readonly SettingsViewModel _viewModel;
+    private readonly BackdropController? _backdrop;
+    private readonly Dictionary<SettingsPage, FrameworkElement> _pages;
     private bool _closing;
 
-    public SettingsWindow(SettingsViewModel viewModel)
+    public SettingsWindow(SettingsViewModel viewModel, BackdropController? backdrop = null)
     {
         _viewModel = viewModel;
+        _backdrop = backdrop;
         DataContext = viewModel;
         InitializeComponent();
 
-        // Koyu başlık çubuğu.
-        SourceInitialized += (_, _) =>
+        _pages = new Dictionary<SettingsPage, FrameworkElement>
         {
-            var dark = 1;
-            DwmSetWindowAttribute(new WindowInteropHelper(this).Handle, 20, ref dark, sizeof(int));
+            [SettingsPage.General] = new GeneralPage(),
+            [SettingsPage.Appearance] = new AppearancePage(),
+            [SettingsPage.SearchSources] = new SearchSourcesPage(),
+            [SettingsPage.Plugins] = new PluginsPage(),
+            [SettingsPage.About] = new AboutPage(),
         };
+
+        viewModel.PropertyChanged += OnViewModelPropertyChanged;
+        ShowPage(viewModel.SelectedPage);
+
+        // İlk gösterilişte tema (Mica/Acrylic/düz) ve koyu başlık çubuğu; sonra Uygula ve sistem değişiklikleri controller'dan.
+        SourceInitialized += (_, _) => _backdrop?.Attach(this);
     }
 
     /// <summary>Pencereyi açar/öne getirir; her açılışta taslak canlı ayarlardan yenilenir.</summary>
@@ -46,14 +56,17 @@ public partial class SettingsWindow : Window
         Activate();
     }
 
-    /// <summary>Uygulama kapanırken gerçekten kapatır.</summary>
+    /// <summary>Uygulama kapanırken gerçekten kapatır ve abonelikleri bırakır.</summary>
     public void CloseForExit()
     {
         _closing = true;
+        _viewModel.PropertyChanged -= OnViewModelPropertyChanged;
+        _backdrop?.Detach(this);
+        _viewModel.Dispose();
         Close();
     }
 
-    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    protected override void OnClosing(CancelEventArgs e)
     {
         // Pencere yeniden kullanılır; kapatma yalnızca gizler.
         if (!_closing)
@@ -65,65 +78,19 @@ public partial class SettingsWindow : Window
         base.OnClosing(e);
     }
 
-    private void OnHotkeyKeyDown(object sender, KeyEventArgs e)
+    private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        var key = e.Key switch
+        if (e.PropertyName == nameof(SettingsViewModel.SelectedPage))
         {
-            Key.System => e.SystemKey,
-            Key.ImeProcessed => e.ImeProcessedKey,
-            _ => e.Key,
-        };
-
-        // Odak gezintisi (Tab / Shift+Tab) ve pencere kapatma (Alt+F4) yutulmaz.
-        var current = Keyboard.Modifiers;
-        if ((key == Key.Tab && (current & ~ModifierKeys.Shift) == ModifierKeys.None) ||
-            (key == Key.F4 && current.HasFlag(ModifierKeys.Alt)))
-        {
-            return;
-        }
-
-        e.Handled = true;
-
-        if (key is Key.LeftCtrl or Key.RightCtrl or Key.LeftAlt or Key.RightAlt or Key.LeftShift or Key.RightShift
-            or Key.LWin or Key.RWin or Key.None)
-        {
-            return;
-        }
-
-        uint mods = 0;
-        var m = Keyboard.Modifiers;
-        if (m.HasFlag(ModifierKeys.Alt)) mods |= HotkeyParser.ModAlt;
-        if (m.HasFlag(ModifierKeys.Control)) mods |= HotkeyParser.ModControl;
-        if (m.HasFlag(ModifierKeys.Shift)) mods |= HotkeyParser.ModShift;
-        if (m.HasFlag(ModifierKeys.Windows)) mods |= HotkeyParser.ModWin;
-
-        var vk = (uint)KeyInterop.VirtualKeyFromKey(key);
-        if (!_viewModel.TryCaptureHotkey(mods, vk))
-        {
-            _viewModel.IsError = true;
-            _viewModel.Message = "Bu tuş birleşimi kısayol olamaz (Ctrl, Alt ya da Win'den en az biri ve desteklenen bir tuş gerekir).";
-            return;
-        }
-
-        _viewModel.IsError = false;
-        _viewModel.Message = string.Empty;
-    }
-
-    private void OnAddSource(object sender, RoutedEventArgs e) => _viewModel.AddSource();
-
-    private void OnRemoveSource(object sender, RoutedEventArgs e)
-    {
-        if (sender is FrameworkElement { Tag: SearchSourceItem item })
-        {
-            _viewModel.RemoveSource(item);
+            ShowPage(_viewModel.SelectedPage);
         }
     }
 
-    private void OnUnhideProgram(object sender, RoutedEventArgs e)
+    private void ShowPage(SettingsPage page)
     {
-        if (sender is FrameworkElement { Tag: HiddenProgramItem item })
+        if (_pages.TryGetValue(page, out var content) && !ReferenceEquals(PageHost.Content, content))
         {
-            _viewModel.Unhide(item);
+            PageHost.Content = content;
         }
     }
 

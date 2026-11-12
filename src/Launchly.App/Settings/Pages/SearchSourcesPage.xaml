@@ -1,0 +1,56 @@
+<UserControl x:Class="Launchly.App.SettingsUi.Pages.SearchSourcesPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+        <StackPanel Margin="28,22,28,20">
+            <Grid>
+                <TextBlock Text="Arama kaynakları" Style="{StaticResource PageTitleStyle}" />
+                <Button Content="+ Ekle" HorizontalAlignment="Right" VerticalAlignment="Top"
+                        Style="{StaticResource PushButtonStyle}" Click="OnAddSource" />
+            </Grid>
+            <TextBlock Text="Adreste {q} varsa arama yapar, yoksa siteyi açar." Style="{StaticResource HintTextStyle}" Margin="0,0,0,12" />
+
+            <!-- Sütun başlıkları -->
+            <Grid Margin="0,0,0,6">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="30" />
+                    <ColumnDefinition Width="140" />
+                    <ColumnDefinition Width="110" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="42" />
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0" Text="Etkin" Style="{StaticResource HintTextStyle}" />
+                <TextBlock Grid.Column="1" Text="Başlık" Style="{StaticResource HintTextStyle}" />
+                <TextBlock Grid.Column="2" Text="Anahtar kelime" Style="{StaticResource HintTextStyle}" />
+                <TextBlock Grid.Column="3" Text="Adres şablonu" Style="{StaticResource HintTextStyle}" />
+            </Grid>
+
+            <ItemsControl ItemsSource="{Binding Sources}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Grid Margin="0,0,0,8">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="30" />
+                                <ColumnDefinition Width="140" />
+                                <ColumnDefinition Width="110" />
+                                <ColumnDefinition Width="*" />
+                                <ColumnDefinition Width="42" />
+                            </Grid.ColumnDefinitions>
+                            <CheckBox Grid.Column="0" IsChecked="{Binding Enabled}" Style="{StaticResource DarkCheckBoxStyle}"
+                                      ToolTip="Etkin" VerticalAlignment="Center" />
+                            <TextBox Grid.Column="1" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,6,0" ToolTip="Başlık" />
+                            <TextBox Grid.Column="2" Text="{Binding ActionKeyword, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,6,0" ToolTip="Anahtar kelime" />
+                            <TextBox Grid.Column="3" Text="{Binding UrlTemplate, UpdateSourceTrigger=PropertyChanged}"
+                                     Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,6,0" ToolTip="Adres şablonu" />
+                            <Button Grid.Column="4" Content="&#xE74D;" FontFamily="{StaticResource IconFont}"
+                                    Style="{StaticResource PushButtonStyle}" Padding="10,6" ToolTip="Sil"
+                                    Tag="{Binding}" Click="OnRemoveSource" />
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

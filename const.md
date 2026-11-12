@@ -15,4 +15,8 @@ Projede değişmeyen gerçekler (sabit kararlar, kısıtlar, tanımlar). Değiş
 - .NET 9 SDK PATH'te değil: `C:\Users\samet\AppData\Local\Microsoft\dotnet\dotnet.exe` (gerekirse `DOTNET_ROOT` aynı klasör).
 
 - Anahtar kelime eşitliği `KeywordComparer` ile: büyük/küçük harf duyarsız ve i/İ/ı/I aynı harf; QueryBuilder, PluginManager dizini, WebSearch ve ayar doğrulaması aynı karşılaştırıcıyı kullanır.
+- `settings.json` `Version` 2: dosyadan `Version < 2` okunursa `Settings.Normalize` bir kez `Backdrop` Mica → Acrylic yapar (None/Acrylic korunur); `Version` alanı yoksa 2 sayılır. Varsayılan tema Acrylic.
+- Logo: kaynak `assets/logo-source.jpg`; `tools/make-ico.ps1` `src/Launchly.App/Assets/Launchly.png` ve 8 boyutlu (16/20/24/32/40/48/64/256, PNG kodlu) `Launchly.ico` üretir. Pack URI: `pack://application:,,,/Assets/Launchly.ico`.
+- DWM backdrop (Mica/Acrylic) `WindowStyle=None` pencerede çizilmez; çerçevesiz pencereler `WindowBackdrop.PrepareBorderless` ile hazırlanır. Kaplama alfaları `BackdropPalette`: Mica 0x40, Acrylic 0x99, zemin #1F2024. Acrylic pencere etkin değilken düz renge döner (DWM).
+- Tema fırçaları (`WindowBackgroundBrush`, `FooterBrush`, `FieldBrush`) pencere `Resources`'ında ezilir; XAML'de `DynamicResource` ile kullanılır.
 - `SearchSource.IsSearchable` ({q} var mı) hesaplanır, JSON'a yazılmaz; `{q}`'suz kaynak anahtar kelimeyle siteyi açar, ek metin yok sayılır.

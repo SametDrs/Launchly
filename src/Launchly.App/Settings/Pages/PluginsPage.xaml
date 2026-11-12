@@ -1,0 +1,84 @@
+<UserControl x:Class="Launchly.App.SettingsUi.Pages.PluginsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Name="Root">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+        <StackPanel Margin="28,22,28,20">
+            <TextBlock Text="Eklentiler" Style="{StaticResource PageTitleStyle}" />
+            <TextBlock Text="Kapalı eklentiler aramada sonuç vermez ve anahtar kelimeleri boşa çıkar. Uygula'ya basınca hemen geçerli olur."
+                       Style="{StaticResource HintTextStyle}" Margin="0,0,0,14" />
+
+            <ItemsControl ItemsSource="{Binding Plugins}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <Border Style="{StaticResource CardStyle}">
+                            <StackPanel>
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*" />
+                                        <ColumnDefinition Width="Auto" />
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                                        <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" />
+                                        <TextBlock FontSize="12" Foreground="{StaticResource SubTextBrush}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis">
+                                            <Run Text="{Binding Id, Mode=OneWay}" /><Run Text="  ·  Anahtar kelime: " /><Run Text="{Binding Keywords, Mode=OneWay}" />
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <CheckBox Grid.Column="1" Content="Etkin" IsChecked="{Binding IsEnabled}"
+                                              Style="{StaticResource ToggleSwitchStyle}" VerticalAlignment="Center"
+                                              AutomationProperties.Name="{Binding Name}" />
+                                </Grid>
+
+                                <!-- Programs eklentisinin altında: eylem menüsünden gizlenen uygulamalar -->
+                                <StackPanel Margin="0,14,0,2">
+                                    <StackPanel.Style>
+                                        <Style TargetType="StackPanel">
+                                            <Setter Property="Visibility" Value="Collapsed" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsPrograms}" Value="True">
+                                                    <Setter Property="Visibility" Value="Visible" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </StackPanel.Style>
+                                    <Border Height="1" Background="{StaticResource DividerBrush}" Margin="0,0,0,12" />
+                                    <TextBlock Text="Gizlenen uygulamalar" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Margin="0,0,0,4" />
+                                    <TextBlock Text="Eylem menüsünden (Ctrl+K) gizlenen uygulamalar aramada çıkmaz. &quot;Göster&quot; hemen uygulanır; &quot;Geri al&quot; bunu geri almaz."
+                                               Style="{StaticResource HintTextStyle}" Margin="0,0,0,8" />
+                                    <TextBlock Text="Gizlenen uygulama yok." FontSize="13" Foreground="{StaticResource SubTextBrush}">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Visibility" Value="Visible" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding DataContext.HasHiddenPrograms, ElementName=Root}" Value="True">
+                                                        <Setter Property="Visibility" Value="Collapsed" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <ItemsControl ItemsSource="{Binding DataContext.HiddenPrograms, ElementName=Root}">
+                                        <ItemsControl.ItemTemplate>
+                                            <DataTemplate>
+                                                <Grid Margin="0,0,0,6">
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="*" />
+                                                        <ColumnDefinition Width="Auto" />
+                                                    </Grid.ColumnDefinitions>
+                                                    <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13" Foreground="{StaticResource TextBrush}"
+                                                               VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Id}" />
+                                                    <Button Grid.Column="1" Content="Göster" Style="{StaticResource PushButtonStyle}"
+                                                            Tag="{Binding}" Click="OnUnhideProgram" />
+                                                </Grid>
+                                            </DataTemplate>
+                                        </ItemsControl.ItemTemplate>
+                                    </ItemsControl>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

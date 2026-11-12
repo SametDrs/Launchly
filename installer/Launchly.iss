@@ -24,6 +24,8 @@ OutputBaseFilename=Launchly-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\src\Launchly.App\Assets\Launchly.ico
+; Exe ikonu taşıdığı için kaldırma girdisi de logoyu gösterir.
 UninstallDisplayIcon={app}\{#AppExe}
 CloseApplications=yes
 

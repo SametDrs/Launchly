@@ -58,16 +58,26 @@ public sealed class PluginManager : IDisposable
     /// <paramref name="exceptPluginId"/> dışındaki etkin eklentilerin anahtar kelimeleri (global "*" hariç).
     /// Ayarlarda tanımlanan özel kaynakların bu kelimelerle çakışması reddedilir.
     /// </summary>
-    public IReadOnlyCollection<string> ReservedKeywords(string exceptPluginId)
+    public IReadOnlyCollection<string> ReservedKeywords(string exceptPluginId) =>
+        ReservedKeywords(exceptPluginId, _settings.DisabledPlugins);
+
+    /// <summary>
+    /// <see cref="ReservedKeywords(string)"/>'in canlı ayar yerine verilen kapalı eklenti listesine göre hesaplanan hali
+    /// (ayar taslağı doğrulanırken: taslakta kapatılan eklentinin kelimesi serbest, açılanınki ayrılmış sayılır).
+    /// </summary>
+    public IReadOnlyCollection<string> ReservedKeywords(string exceptPluginId, IReadOnlyCollection<string>? disabledPlugins)
     {
         lock (_gate)
         {
             return _byKeyword
-                .Where(kv => kv.Value.Any(p => IsEnabled(p) && !string.Equals(p.Metadata.Id, exceptPluginId, StringComparison.Ordinal)))
+                .Where(kv => kv.Value.Any(p => IsEnabledFor(p, disabledPlugins) && !string.Equals(p.Metadata.Id, exceptPluginId, StringComparison.Ordinal)))
                 .Select(kv => kv.Key)
                 .ToArray();
         }
     }
+
+    /// <summary>Kayıtlı tüm eklentilerin (kapalı ve başlatılamamış olanlar dahil) güncel tanımları; ayar penceresi için.</summary>
+    public IReadOnlyList<PluginMetadata> Plugins => _plugins.Select(p => p.Metadata).ToArray();
 
     /// <summary>Tüm eklentileri paralel başlatır. Başlatması başarısız olan eklenti devre dışı bırakılır.</summary>
     public async Task InitializeAsync()
@@ -338,8 +348,11 @@ public sealed class PluginManager : IDisposable
         }
     }
 
-    private bool IsEnabled(IPlugin plugin) =>
-        _settings.DisabledPlugins?.Contains(plugin.Metadata.Id, StringComparer.Ordinal) != true;
+    // DisabledPlugins sorgu iş parçacığında okunur: SettingsService.Apply listeyi yerinde değiştirmez, yeni liste atar.
+    private bool IsEnabled(IPlugin plugin) => IsEnabledFor(plugin, _settings.DisabledPlugins);
+
+    private static bool IsEnabledFor(IPlugin plugin, IReadOnlyCollection<string>? disabledPlugins) =>
+        disabledPlugins?.Contains(plugin.Metadata.Id, StringComparer.Ordinal) != true;
 
     private void CancelLocked()
     {

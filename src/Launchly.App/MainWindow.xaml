@@ -143,7 +143,7 @@
             </ListView>
 
             <!-- Alt çubuk -->
-            <Border Grid.Row="2" Height="40" Background="{StaticResource FooterBrush}"
+            <Border Grid.Row="2" Height="40" Background="{DynamicResource FooterBrush}"
                     BorderBrush="{StaticResource DividerBrush}" BorderThickness="0,1,0,0">
                 <Grid Margin="12,0">
                     <Button x:Name="SettingsButton" Content="Settings" HorizontalAlignment="Left"

@@ -186,7 +186,7 @@ public sealed class SettingsServiceTests : IDisposable
         _hotkey.Taken.Add("Ctrl+Shift+K");
         var draft = _service.CreateDraft();
         draft.Hotkey = "Ctrl+Shift+K";
-        draft.Backdrop = BackdropType.Acrylic;
+        draft.Backdrop = BackdropType.Mica;
 
         var result = _service.Apply(draft);
 
@@ -195,7 +195,7 @@ public sealed class SettingsServiceTests : IDisposable
         Assert.Equal(["Ctrl+Shift+K", "Alt+Space"], _hotkey.Calls);
         Assert.Equal("Alt+Space", _hotkey.Current);
         Assert.Equal("Alt+Space", _live.Hotkey);
-        Assert.Equal(BackdropType.Mica, _live.Backdrop); // hiçbir şey uygulanmadı
+        Assert.Equal(BackdropType.Acrylic, _live.Backdrop); // hiçbir şey uygulanmadı (varsayılan Acrylic kaldı)
     }
 
     [Fact]

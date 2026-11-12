@@ -1,0 +1,47 @@
+<UserControl x:Class="Launchly.App.SettingsUi.Pages.AppearancePage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
+        <StackPanel Margin="28,22,28,20">
+            <TextBlock Text="Görünüm" Style="{StaticResource PageTitleStyle}" />
+
+            <TextBlock Text="Tema" Style="{StaticResource SectionTitleStyle}" Margin="0,0,0,4" />
+            <TextBlock Text="Ana pencere ve bu pencere aynı temayı kullanır. Uygula'ya basınca açık pencerelere hemen uygulanır."
+                       Style="{StaticResource HintTextStyle}" Margin="0,0,0,10" />
+            <StackPanel Orientation="Horizontal">
+                <RadioButton Content="Koyu (düz)" GroupName="Backdrop" IsChecked="{Binding IsBackdropNone}" Style="{StaticResource PillRadioStyle}" />
+                <RadioButton Content="Mica" GroupName="Backdrop" IsChecked="{Binding IsBackdropMica}"
+                             IsEnabled="{Binding IsBackdropSupported}" Style="{StaticResource PillRadioStyle}" />
+                <RadioButton Content="Acrylic (bulanık)" GroupName="Backdrop" IsChecked="{Binding IsBackdropAcrylic}"
+                             IsEnabled="{Binding IsBackdropSupported}" Style="{StaticResource PillRadioStyle}" />
+            </StackPanel>
+
+            <!-- Desteklenmiyorsa neden (Windows sürümü ya da kapalı saydamlık); seçili tür yine düz koyu olarak uygulanır. -->
+            <Border x:Name="UnavailableCard" Margin="0,12,0,0">
+                <Border.Style>
+                    <Style TargetType="Border" BasedOn="{StaticResource CardStyle}">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsBackdropSupported}" Value="False">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Border.Style>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="&#xE946;" FontFamily="{StaticResource IconFont}" FontSize="14"
+                               Foreground="{StaticResource SubTextBrush}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <TextBlock FontSize="13" Foreground="{StaticResource TextBrush}" TextWrapping="Wrap" VerticalAlignment="Center">
+                        <Run Text="{Binding BackdropUnavailableReason, Mode=OneWay}" /><Run Text=". Mica ve Acrylic yerine düz koyu tema kullanılır." />
+                    </TextBlock>
+                </StackPanel>
+            </Border>
+
+            <TextBlock Style="{StaticResource HintTextStyle}" Margin="0,14,0,0">
+                <Run Text="Koyu (düz): opak koyu zemin." /><LineBreak />
+                <Run Text="Mica: duvar kağıdının tonunu alır (arkadaki pencereleri göstermez)." /><LineBreak />
+                <Run Text="Acrylic (bulanık): arkadaki pencereleri bulanık gösterir; pencere etkin değilken düz renge döner." />
+            </TextBlock>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
