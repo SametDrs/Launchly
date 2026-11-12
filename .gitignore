@@ -37,3 +37,13 @@ packages/
 Thumbs.db
 Desktop.ini
 .DS_Store
+
+# İç çalışma dosyaları (yerelde kalır)
+CLAUDE.md
+AGENTS.md
+const.md
+notes.md
+backlog.md
+backlog-log.md
+tasks/
+.claude/
