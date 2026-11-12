@@ -11,6 +11,9 @@ public sealed class PluginMetadata
 
     public required string Name { get; init; }
 
+    /// <summary>Ayar penceresinde adın altında görünen tek cümlelik açıklama. Varsayılan boş (eski eklentiler etkilenmez).</summary>
+    public string Description { get; init; } = string.Empty;
+
     /// <summary>Tetikleyici kelimeler (küçük/büyük harf duyarsız). <see cref="GlobalKeyword"/> = global.</summary>
     public IReadOnlyList<string> ActionKeywords { get; init; } = [GlobalKeyword];
 

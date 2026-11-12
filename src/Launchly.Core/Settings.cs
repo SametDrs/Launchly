@@ -9,8 +9,11 @@ namespace Launchly.Core;
 public sealed class Settings
 {
     /// <summary>Güncel ayar şeması sürümü.</summary>
-    /// <remarks>2: varsayılan tema Mica'dan Acrylic'e geçti (v1 dosyasındaki "Mica" bir kez Acrylic'e çevrilir).</remarks>
-    public const int CurrentVersion = 2;
+    /// <remarks>
+    /// 2: varsayılan tema Mica'dan Acrylic'e geçti (v1 dosyasındaki "Mica" bir kez Acrylic'e çevrilir).
+    /// 3: Bing, DuckDuckGo ve Wikipedia varsayılan kaynaklardan çıktı (eski varsayılanla birebir aynı kayıtlar bir kez silinir).
+    /// </remarks>
+    public const int CurrentVersion = 3;
 
     /// <summary>Ayar şeması sürümü (göç için). Alanı olmayan dosya güncel sürümle okunur ve göçe girmez.</summary>
     public int Version { get; set; } = CurrentVersion;
@@ -48,8 +51,6 @@ public sealed class Settings
     /// </summary>
     public Settings Normalize(ILogger? logger = null)
     {
-        Migrate(logger);
-
         DisabledPlugins = (DisabledPlugins ?? []).Where(id => id is not null).ToList();
         SearchSources = SearchSources is null
             ? SearchSource.CreateDefaults()
@@ -58,6 +59,8 @@ public sealed class Settings
         {
             source.Normalize();
         }
+
+        Migrate(logger);
 
         if (!HotkeyParser.TryParse(Hotkey, out _))
         {
@@ -74,6 +77,10 @@ public sealed class Settings
     /// Eski şema sürümlerinden tek seferlik geçiş. Sonuç diske bir sonraki kayıtta (çıkış ya da Uygula) yazılır.
     /// v1 → v2: "Mica" eski varsayılandı, kullanıcı seçimi sayılmaz ve Acrylic olur; None/Acrylic korunur.
     /// v2 dosyasındaki Mica açık seçimdir ve korunur.
+    /// v2 → v3: eski varsayılan Bing/DuckDuckGo/Wikipedia kayıtları, yalnızca anahtar kelime VE adres şablonu
+    /// eski varsayılanla birebir aynıysa silinir; kullanıcının değiştirdiği ya da eklediği kayıt kalır.
+    /// Sürüm 3'e yükseldiği için sonradan elle yeniden eklenen kayıt bir daha silinmez.
+    /// Kaynak listesi normalleştirildikten sonra çağrılır.
     /// </summary>
     private void Migrate(ILogger? logger)
     {
@@ -93,6 +100,25 @@ public sealed class Settings
             logger?.LogInformation("Ayar geçişi v{From} → v{To}: tema {Backdrop} korundu", from, CurrentVersion, Backdrop);
         }
 
+        if (Version < 3)
+        {
+            var removed = SearchSources.RemoveAll(s => RemovedDefaults.Any(d =>
+                string.Equals(s.ActionKeyword, d.Keyword, StringComparison.Ordinal)
+                && string.Equals(s.UrlTemplate, d.Url, StringComparison.Ordinal)));
+            if (removed > 0)
+            {
+                logger?.LogInformation("Ayar geçişi v{From} → v{To}: {Count} eski varsayılan arama kaynağı silindi", from, CurrentVersion, removed);
+            }
+        }
+
         Version = CurrentVersion;
     }
+
+    // v3'te varsayılandan çıkarılan kaynaklar (v1/v2 dosyalarında kayıtlı kalmıştır).
+    private static readonly (string Keyword, string Url)[] RemovedDefaults =
+    [
+        ("bing", "https://www.bing.com/search?q={q}"),
+        ("duckduckgo", "https://duckduckgo.com/?q={q}"),
+        ("wikipedia", "https://en.wikipedia.org/w/index.php?search={q}"),
+    ];
 }

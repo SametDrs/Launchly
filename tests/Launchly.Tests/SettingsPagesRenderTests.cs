@@ -120,7 +120,7 @@ public class SettingsPagesRenderTests
                     (new AppearancePage(), "Görünüm", "Windows 11 22H2 ve sonrası gerekir"),
                     (new SearchSourcesPage(), "Arama kaynakları", "Adreste {q} varsa arama yapar, yoksa siteyi açar."),
                     (new PluginsPage(), "Eklentiler", "launchly.files"),
-                    (new AboutPage(), "Hakkında", "Launchly"),
+                    (new AboutPage(), "Hakkında", "Üretici: Samet Dursun"),
                 };
 
                 foreach (var (page, title, expected) in pages)

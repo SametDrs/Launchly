@@ -20,6 +20,19 @@
                                     </Grid.ColumnDefinitions>
                                     <StackPanel Grid.Column="0" VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Name}" FontSize="14" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" />
+                                        <TextBlock Text="{Binding Description}" FontSize="12.5" Foreground="{StaticResource TextBrush}" Opacity="0.85"
+                                                   Margin="0,3,0,0" TextWrapping="Wrap">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding HasDescription}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
                                         <TextBlock FontSize="12" Foreground="{StaticResource SubTextBrush}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis">
                                             <Run Text="{Binding Id, Mode=OneWay}" /><Run Text="  ·  Anahtar kelime: " /><Run Text="{Binding Keywords, Mode=OneWay}" />
                                         </TextBlock>

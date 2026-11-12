@@ -85,7 +85,7 @@ public sealed class UrlPlugin : IPlugin
         _logger = logger ?? NullLogger.Instance;
     }
 
-    public PluginMetadata Metadata { get; } = new() { Id = PluginId, Name = "URL" };
+    public PluginMetadata Metadata { get; } = new() { Id = PluginId, Name = "URL", Description = "Yazdığın web adresini varsayılan tarayıcıda açar." };
 
     public Task InitAsync(PluginContext context) => Task.CompletedTask;
 

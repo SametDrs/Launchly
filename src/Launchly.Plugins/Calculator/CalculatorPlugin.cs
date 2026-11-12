@@ -36,7 +36,7 @@ public sealed class CalculatorPlugin : IPlugin
         _logger = logger ?? NullLogger.Instance;
     }
 
-    public PluginMetadata Metadata { get; } = new() { Id = PluginId, Name = "Calculator" };
+    public PluginMetadata Metadata { get; } = new() { Id = PluginId, Name = "Calculator", Description = "Yazdığın matematik ifadesini hesaplar; sonucu Enter ile kopyalar." };
 
     public Task InitAsync(PluginContext context) => Task.CompletedTask;
 

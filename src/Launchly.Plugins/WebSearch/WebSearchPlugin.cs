@@ -38,6 +38,7 @@ public sealed class WebSearchPlugin : IPlugin
     {
         Id = PluginId,
         Name = "Web Search",
+        Description = "Arama kaynaklarının anahtar kelimesiyle (ör. google, youtube) web'de arama yapar.",
         ActionKeywords = ActiveSources(_settings.SearchSources)
             .Select(s => s.ActionKeyword.Trim())
             .Distinct(KeywordComparer.Instance)

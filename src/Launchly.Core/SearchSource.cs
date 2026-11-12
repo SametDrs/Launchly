@@ -70,9 +70,6 @@ public sealed class SearchSource
     [
         new() { Title = "Google", ActionKeyword = "google", UrlTemplate = "https://www.google.com/search?q={q}" },
         new() { Title = "YouTube", ActionKeyword = "youtube", UrlTemplate = "https://www.youtube.com/results?search_query={q}" },
-        new() { Title = "Bing", ActionKeyword = "bing", UrlTemplate = "https://www.bing.com/search?q={q}" },
-        new() { Title = "DuckDuckGo", ActionKeyword = "duckduckgo", UrlTemplate = "https://duckduckgo.com/?q={q}" },
         new() { Title = "GitHub", ActionKeyword = "github", UrlTemplate = "https://github.com/search?q={q}" },
-        new() { Title = "Wikipedia", ActionKeyword = "wikipedia", UrlTemplate = "https://en.wikipedia.org/w/index.php?search={q}" },
     ];
 }

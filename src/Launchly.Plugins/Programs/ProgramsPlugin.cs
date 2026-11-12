@@ -82,6 +82,7 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
     {
         Id = PluginId,
         Name = "Programs",
+        Description = "Yüklü uygulamaları ve kısayolları bulup başlatır; anahtar kelime gerekmez.",
         ActionKeywords = [PluginMetadata.GlobalKeyword],
         HandlesEmptyQuery = true,
     };

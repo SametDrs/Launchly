@@ -353,7 +353,7 @@ public sealed class CustomSourceTests : IDisposable
 
         Assert.False(result.Success);
         Assert.Contains("başka bir eklentiye", result.Error);
-        Assert.Contains("7. satır", result.Error);
+        Assert.Contains("4. satır", result.Error);
         Assert.DoesNotContain(rig.Live.SearchSources, s => s.Title == "Dosya");
         Assert.False(File.Exists(rig.Storage.FilePath));
     }
@@ -380,7 +380,7 @@ public sealed class CustomSourceTests : IDisposable
 
         Assert.False(result.Success);
         Assert.Contains("birden fazla", result.Error);
-        Assert.Contains("8. satır", result.Error);
+        Assert.Contains("5. satır", result.Error);
     }
 
     [Fact]
@@ -393,7 +393,7 @@ public sealed class CustomSourceTests : IDisposable
         var result = rig.Service.Apply(draft);
 
         Assert.False(result.Success);
-        Assert.Contains("7. satır", result.Error);
+        Assert.Contains("4. satır", result.Error);
     }
 
     [Fact]
@@ -501,7 +501,7 @@ public sealed class CustomSourceTests : IDisposable
         vm.AddSource();
         Assert.False(vm.Apply());
         Assert.True(vm.IsError);
-        Assert.Contains("8. satır", vm.Message);
+        Assert.Contains("5. satır", vm.Message);
     }
 
     // ---- UrlDetector ----

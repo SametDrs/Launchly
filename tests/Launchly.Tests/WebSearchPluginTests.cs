@@ -133,7 +133,7 @@ public sealed class WebSearchPluginTests : IDisposable
     {
         var settings = new Settings { SearchSources = [] };
         await Create(settings, new FakeOpener()).InitAsync(new PluginContext(_dir));
-        Assert.Equal(6, settings.SearchSources.Count);
+        Assert.Equal(3, settings.SearchSources.Count);
     }
 
     [Fact]
@@ -155,11 +155,11 @@ public sealed class WebSearchPluginTests : IDisposable
     public void Settings_DefaultSources_AreComplete_AndRoundTripThroughJson()
     {
         var keywords = new Settings().SearchSources.Select(s => s.ActionKeyword);
-        Assert.Equal(["google", "youtube", "bing", "duckduckgo", "github", "wikipedia"], keywords);
+        Assert.Equal(["google", "youtube", "github"], keywords);
 
         // settings.json'da SearchSources yoksa varsayılanlar gelir.
         var loaded = System.Text.Json.JsonSerializer.Deserialize<Settings>("{\"Hotkey\":\"Alt+Space\"}")!;
-        Assert.Equal(6, loaded.SearchSources.Count);
+        Assert.Equal(3, loaded.SearchSources.Count);
     }
 
     [Theory]

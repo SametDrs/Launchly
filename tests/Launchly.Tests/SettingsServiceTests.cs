@@ -130,10 +130,10 @@ public sealed class SettingsServiceTests : IDisposable
     public void Apply_DisabledSource_KeywordStopsWorking()
     {
         var draft = _service.CreateDraft();
-        draft.SearchSources.First(s => s.ActionKeyword == "bing").Enabled = false;
+        draft.SearchSources.First(s => s.ActionKeyword == "github").Enabled = false;
 
         Assert.True(_service.Apply(draft).Success);
-        Assert.DoesNotContain("bing", _plugins.ActionKeywords);
+        Assert.DoesNotContain("github", _plugins.ActionKeywords);
     }
 
     [Theory]

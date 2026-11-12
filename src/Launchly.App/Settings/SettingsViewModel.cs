@@ -19,6 +19,38 @@ public enum SettingsPage
     About,
 }
 
+/// <summary>Bir geri çağrıyı gecikmeyle çalıştıran zamanlayıcı; testte sahtesi verilir (gerçek bekleme olmaz).</summary>
+public interface IDelayScheduler
+{
+    /// <summary>Gecikme sonunda <paramref name="callback"/> bir kez çalışır; dönen nesne Dispose edilirse hiç çalışmaz.</summary>
+    IDisposable Schedule(TimeSpan delay, Action callback);
+}
+
+/// <summary>UI iş parçacığında <see cref="DispatcherTimer"/> ile çalışan gerçek zamanlayıcı.</summary>
+public sealed class DispatcherDelayScheduler : IDelayScheduler
+{
+    private readonly Dispatcher _dispatcher;
+
+    public DispatcherDelayScheduler(Dispatcher dispatcher) => _dispatcher = dispatcher;
+
+    public IDisposable Schedule(TimeSpan delay, Action callback)
+    {
+        var timer = new DispatcherTimer(DispatcherPriority.Normal, _dispatcher) { Interval = delay };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            callback();
+        };
+        timer.Start();
+        return new Handle(timer);
+    }
+
+    private sealed class Handle(DispatcherTimer timer) : IDisposable
+    {
+        public void Dispose() => timer.Stop();
+    }
+}
+
 /// <summary>Ayar penceresindeki gizlenen uygulama satırı.</summary>
 public sealed record HiddenProgramItem(string Id, string Name);
 
@@ -33,6 +65,11 @@ public sealed partial class PluginToggleItem : ObservableObject
 
     /// <summary>Gösterim için anahtar kelimeler ("Global" = anahtar kelimesiz her sorguda).</summary>
     public required string Keywords { get; init; }
+
+    /// <summary>Adın altında görünen tek cümlelik açıklama (boş olabilir).</summary>
+    public string Description { get; init; } = string.Empty;
+
+    public bool HasDescription => Description.Length > 0;
 
     /// <summary>Gizlenen uygulamalar bu eklentinin altında gösterilir.</summary>
     public bool IsPrograms => Id == ProgramsPlugin.PluginId;
@@ -88,6 +125,9 @@ public sealed partial class SearchSourceItem : ObservableObject
 /// </summary>
 public sealed partial class SettingsViewModel : ObservableObject, IDisposable
 {
+    /// <summary>Başarı mesajının ekranda kalma süresi.</summary>
+    public static readonly TimeSpan SuccessMessageLifetime = TimeSpan.FromSeconds(2);
+
     public const string RepositoryUrl = "https://github.com/SametDrs/Launchly";
 
     private readonly SettingsService _service;
@@ -96,6 +136,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     private readonly Func<(bool Supported, string? Reason)> _backdropAvailability;
     private readonly IUrlOpener? _urlOpener;
     private readonly Dispatcher _dispatcher;
+    private readonly IDelayScheduler _scheduler;
+    private IDisposable? _messageTimer;
+    private int _messageToken;
     private bool _disposed;
 
     // Taslakta görünmeyen (kayıtlı olmayan) eklenti Id'leri: Uygula'da korunur.
@@ -120,7 +163,8 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         ProgramUsageStore? usage = null,
         Func<IReadOnlyList<PluginMetadata>>? plugins = null,
         Func<(bool Supported, string? Reason)>? backdropAvailability = null,
-        IUrlOpener? urlOpener = null)
+        IUrlOpener? urlOpener = null,
+        IDelayScheduler? scheduler = null)
     {
         _service = service;
         _usage = usage;
@@ -128,6 +172,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         _backdropAvailability = backdropAvailability ?? (() => (true, null));
         _urlOpener = urlOpener;
         _dispatcher = Dispatcher.CurrentDispatcher;
+        _scheduler = scheduler ?? new DispatcherDelayScheduler(_dispatcher);
         Revert();
 
         if (usage is not null)
@@ -191,8 +236,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            IsError = true;
-            Message = "Bağlantı açılamadı: " + ex.Message;
+            SetStatus("Bağlantı açılamadı: " + ex.Message, isError: true, autoClear: false);
         }
     }
 
@@ -295,6 +339,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             {
                 Id = plugin.Id,
                 Name = plugin.Name,
+                Description = plugin.Description ?? string.Empty,
                 Keywords = PluginToggleItem.FormatKeywords(plugin.ActionKeywords),
                 IsEnabled = !disabled.Contains(plugin.Id),
             });
@@ -304,8 +349,33 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         _unknownDisabled = draft.DisabledPlugins.Where(id => !known.Contains(id)).ToList();
 
         RefreshBackdropAvailability();
-        Message = string.Empty;
-        IsError = false;
+        SetStatus(string.Empty, isError: false, autoClear: false);
+    }
+
+    /// <summary>
+    /// Alt çubuk mesajını ayarlar. Önceki zamanlayıcı her zaman iptal edilir; jeton, iptal edilemeyen
+    /// (zaten tetiklenmiş) eski geri çağrının yeni mesajı silmesini engeller.
+    /// </summary>
+    private void SetStatus(string message, bool isError, bool autoClear)
+    {
+        _messageTimer?.Dispose();
+        _messageTimer = null;
+        var token = ++_messageToken;
+        IsError = isError;
+        Message = message;
+
+        if (autoClear && !_disposed)
+        {
+            _messageTimer = _scheduler.Schedule(SuccessMessageLifetime, () =>
+            {
+                if (token == _messageToken && !_disposed)
+                {
+                    _messageTimer = null;
+                    Message = string.Empty;
+                    IsError = false;
+                }
+            });
+        }
     }
 
     /// <summary>Tüm sayfaların taslağını birlikte uygular; sonuç <see cref="Message"/> ve <see cref="IsError"/> ile görünür.</summary>
@@ -320,8 +390,9 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         draft.DisabledPlugins = [.. _unknownDisabled, .. Plugins.Where(p => !p.IsEnabled).Select(p => p.Id)];
 
         var result = _service.Apply(draft);
-        IsError = !result.Success || result.Error is not null;   // başarıyla dönen Error bir uyarıdır
-        Message = result.Success ? result.Error ?? "Ayarlar uygulandı." : result.Error ?? "Ayarlar uygulanamadı.";
+        var isError = !result.Success || result.Error is not null;   // başarıyla dönen Error bir uyarıdır
+        var message = result.Success ? result.Error ?? "Ayarlar uygulandı." : result.Error ?? "Ayarlar uygulanamadı.";
+        SetStatus(message, isError, autoClear: !isError);   // yalnızca düz başarı kaybolur; hata/uyarı kalır
         return result.Success;
     }
 
@@ -334,6 +405,8 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         }
 
         _disposed = true;
+        _messageTimer?.Dispose();
+        _messageTimer = null;
         if (_usage is not null)
         {
             _usage.Changed -= OnUsageChanged;

@@ -117,7 +117,7 @@ public sealed class SystemPlugin : IPlugin
         _logger = logger ?? NullLogger.Instance;
     }
 
-    public PluginMetadata Metadata { get; } = new() { Id = PluginId, Name = "System" };
+    public PluginMetadata Metadata { get; } = new() { Id = PluginId, Name = "System", Description = "Kilitle, uyku, kapat, yeniden başlat ve geri dönüşüm kutusunu boşalt gibi sistem komutlarını çalıştırır." };
 
     public Task InitAsync(PluginContext context) => Task.CompletedTask;
 

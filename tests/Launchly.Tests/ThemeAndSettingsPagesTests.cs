@@ -92,12 +92,12 @@ public class ThemeTests
     // ---- Settings.Normalize: v1 → v2 geçişi ----
 
     [Fact]
-    public void NewSettings_AreVersion2_WithAcrylic()
+    public void NewSettings_AreVersion3_WithAcrylic()
     {
         var s = new Settings();
 
-        Assert.Equal(2, Settings.CurrentVersion);
-        Assert.Equal(2, s.Version);
+        Assert.Equal(3, Settings.CurrentVersion);
+        Assert.Equal(3, s.Version);
         Assert.Equal(BackdropType.Acrylic, s.Backdrop);
         Assert.Equal(BackdropType.Acrylic, s.Normalize().Backdrop);
     }
@@ -119,7 +119,7 @@ public class ThemeTests
         var s = new JsonStorage<Settings>(path).Load().Normalize();
 
         Assert.Equal(expected, s.Backdrop);
-        Assert.Equal(2, s.Version);
+        Assert.Equal(3, s.Version);
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public class ThemeTests
         storage.Save(first);
 
         var text = File.ReadAllText(path);
-        Assert.Contains("\"Version\": 2", text);
+        Assert.Contains("\"Version\": 3", text);
         Assert.Contains("\"Backdrop\": \"Acrylic\"", text);
 
         // Kullanıcı sonra Mica seçer: yeniden açılışta Mica kalır.
@@ -143,11 +143,11 @@ public class ThemeTests
         storage.Save(first);
         var second = storage.Load().Normalize();
         Assert.Equal(BackdropType.Mica, second.Backdrop);
-        Assert.Equal(2, second.Version);
+        Assert.Equal(3, second.Version);
     }
 
     [Fact]
-    public void Version_StaysAt2_AfterCreateDraftAndApply()
+    public void Version_StaysAt3_AfterCreateDraftAndApply()
     {
         using var dir = new TempDir();
         var storage = new JsonStorage<Settings>(Path.Combine(dir.Path, "settings.json"));
@@ -156,14 +156,14 @@ public class ThemeTests
         var service = new SettingsService(live, storage, new OkHotkey(), new NoAutoStart(), manager);
 
         var draft = service.CreateDraft();
-        Assert.Equal(2, draft.Version);
+        Assert.Equal(3, draft.Version);
         draft.Backdrop = BackdropType.Mica;
         Assert.True(service.Apply(draft).Success);
 
-        Assert.Equal(2, live.Version);
+        Assert.Equal(3, live.Version);
         Assert.Equal(BackdropType.Mica, live.Backdrop);
         var reloaded = storage.Load();
-        Assert.Equal(2, reloaded.Version);
+        Assert.Equal(3, reloaded.Version);
         Assert.Equal(BackdropType.Mica, reloaded.Normalize().Backdrop);
     }
 

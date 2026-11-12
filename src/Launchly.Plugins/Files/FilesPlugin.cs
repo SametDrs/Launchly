@@ -61,6 +61,7 @@ public sealed class FilesPlugin : IPlugin
     {
         Id = PluginId,
         Name = "Files",
+        Description = "Anahtar kelime: f. Klasörlerdeki dosyaları adıyla arar ve açar.",
         ActionKeywords = [Keyword],
         SearchDelayMs = 120,
     };

@@ -18,7 +18,10 @@
                 </StackPanel>
             </StackPanel>
 
-            <TextBlock Text="Kaynak kod" Style="{StaticResource SectionTitleStyle}" Margin="0,24,0,6" />
+            <TextBlock FontSize="13" Foreground="{StaticResource SubTextBrush}" Margin="0,20,0,0"
+                       Text="Üretici: Samet Dursun" />
+
+            <TextBlock Text="Kaynak kod" Style="{StaticResource SectionTitleStyle}" Margin="0,12,0,6" />
             <TextBlock FontSize="13">
                 <Hyperlink Click="OnOpenRepository" Foreground="{StaticResource AccentBrush}" ToolTip="Tarayıcıda aç">
                     <Run Text="{Binding RepositoryLink, Mode=OneWay}" />
