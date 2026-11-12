@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Launchly.Core.Localization;
 
 namespace Launchly.Core;
 
@@ -45,17 +46,17 @@ public sealed class SearchSource
     {
         if (string.IsNullOrWhiteSpace(Title))
         {
-            error = "Başlık boş olamaz.";
+            error = Loc.T("source.titleEmpty");
         }
         else if (string.IsNullOrWhiteSpace(ActionKeyword) || ActionKeyword.Any(char.IsWhiteSpace) || ActionKeyword.Trim() == "*")
         {
-            error = "Anahtar kelime boş olamaz, boşluk içeremez ve \"*\" olamaz.";
+            error = Loc.T("source.keywordInvalid");
         }
         else if (!Uri.TryCreate((UrlTemplate ?? string.Empty).Trim().Replace(Placeholder, "x", StringComparison.Ordinal), UriKind.Absolute, out var uri)
                  || (uri.Scheme != Uri.UriSchemeHttp && uri.Scheme != Uri.UriSchemeHttps)
                  || uri.Host.Length == 0)
         {
-            error = "Adres http:// veya https:// ile başlayan geçerli bir adres olmalı (arama için {q} kullanılabilir).";
+            error = Loc.T("source.urlInvalid");
         }
         else
         {

@@ -3,6 +3,7 @@ using System.Reflection;
 using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Launchly.Core;
+using Launchly.Core.Localization;
 using Launchly.Plugin;
 using Launchly.Plugins.Programs;
 using Launchly.Plugins.WebSearch;
@@ -57,19 +58,50 @@ public sealed record HiddenProgramItem(string Id, string Name);
 /// <summary>Eklentiler sayfasındaki tek eklenti satırı; <see cref="IsEnabled"/> taslaktır, Uygula ile <c>DisabledPlugins</c>'e yazılır.</summary>
 public sealed partial class PluginToggleItem : ObservableObject
 {
+    private string _name = string.Empty;
+    private string _keywords = string.Empty;
+    private string _description = string.Empty;
+
     [ObservableProperty] private bool _isEnabled = true;
 
     public required string Id { get; init; }
 
-    public required string Name { get; init; }
+    /// <summary>Eklenti adı; dil değişince <see cref="Refresh"/> ile yenilenir.</summary>
+    public required string Name
+    {
+        get => _name;
+        set => SetProperty(ref _name, value);
+    }
 
     /// <summary>Gösterim için anahtar kelimeler ("Global" = anahtar kelimesiz her sorguda).</summary>
-    public required string Keywords { get; init; }
+    public required string Keywords
+    {
+        get => _keywords;
+        set => SetProperty(ref _keywords, value);
+    }
 
     /// <summary>Adın altında görünen tek cümlelik açıklama (boş olabilir).</summary>
-    public string Description { get; init; } = string.Empty;
+    public string Description
+    {
+        get => _description;
+        set
+        {
+            if (SetProperty(ref _description, value))
+            {
+                OnPropertyChanged(nameof(HasDescription));
+            }
+        }
+    }
 
     public bool HasDescription => Description.Length > 0;
+
+    /// <summary>Gösterilen metinleri eklentinin güncel (o anki dildeki) meta verisinden yeniler; <see cref="IsEnabled"/> taslağı korunur.</summary>
+    public void Refresh(PluginMetadata metadata)
+    {
+        Name = metadata.Name;
+        Description = metadata.Description ?? string.Empty;
+        Keywords = FormatKeywords(metadata.ActionKeywords);
+    }
 
     /// <summary>Gizlenen uygulamalar bu eklentinin altında gösterilir.</summary>
     public bool IsPrograms => Id == ProgramsPlugin.PluginId;
@@ -83,9 +115,9 @@ public sealed partial class PluginToggleItem : ObservableObject
         var global = keywords.Any(k => k?.Trim() == PluginMetadata.GlobalKeyword);
         return (global, named.Count) switch
         {
-            (true, 0) => "Global",
-            (true, _) => "Global · " + string.Join(", ", named),
-            (false, 0) => "—",
+            (true, 0) => Loc.T("plugins.keywords.global"),
+            (true, _) => Loc.T("plugins.keywords.global") + " · " + string.Join(", ", named),
+            (false, 0) => Loc.T("plugins.keywords.none"),
             _ => string.Join(", ", named),
         };
     }
@@ -137,6 +169,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     private readonly IUrlOpener? _urlOpener;
     private readonly Dispatcher _dispatcher;
     private readonly IDelayScheduler _scheduler;
+    private readonly IDisposable? _languageSubscription;
     private IDisposable? _messageTimer;
     private int _messageToken;
     private bool _disposed;
@@ -149,6 +182,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     [ObservableProperty] private BackdropType _backdrop;
     [ObservableProperty] private bool _hideOnFocusLost;
     [ObservableProperty] private bool _startOnSystemStartup;
+    [ObservableProperty] private string _language = Loc.Auto;
     [ObservableProperty] private string _message = string.Empty;
     [ObservableProperty] private bool _isError;
     [ObservableProperty] private bool _isBackdropSupported = true;
@@ -181,6 +215,87 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
             usage.Changed += OnUsageChanged;
             RefreshHidden();
         }
+
+        _languageSubscription = new LanguageSubscription(this);
+    }
+
+    /// <summary>
+    /// <see cref="Loc.LanguageChanged"/> (statik olay) aboneliği zayıf tutulur: Dispose edilmemiş bir VM olayda yaşatılmaz.
+    /// </summary>
+    private sealed class LanguageSubscription : IDisposable
+    {
+        private readonly WeakReference<SettingsViewModel> _target;
+
+        public LanguageSubscription(SettingsViewModel target)
+        {
+            _target = new WeakReference<SettingsViewModel>(target);
+            Loc.LanguageChanged += OnChanged;
+        }
+
+        private void OnChanged()
+        {
+            if (_target.TryGetTarget(out var viewModel))
+            {
+                viewModel.HandleLanguageChanged();
+            }
+            else
+            {
+                Loc.LanguageChanged -= OnChanged;
+            }
+        }
+
+        public void Dispose() => Loc.LanguageChanged -= OnChanged;
+    }
+
+    /// <summary>
+    /// Dil değişince dile bağlı metinleri yeniler: eklenti ad/açıklama/kelime etiketleri (açık/kapalı taslağı korunur),
+    /// Mica/Acrylic desteklenmeme nedeni ve sürüm metni. XAML metinleri kendiliğinden yenilenir (<c>{loc:T}</c>).
+    /// Ekranda hâlihazırda duran durum mesajı (varsa) eski dilde kalır.
+    /// </summary>
+    private void HandleLanguageChanged()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        var metadata = _plugins();
+        foreach (var item in Plugins)
+        {
+            var current = metadata.FirstOrDefault(m => m.Id == item.Id);
+            if (current is not null)
+            {
+                item.Refresh(current);
+            }
+        }
+
+        RefreshBackdropAvailability();
+        OnPropertyChanged(nameof(AppVersion));
+    }
+
+    public bool IsLanguageAuto
+    {
+        get => Language == Loc.Auto;
+        set { if (value) Language = Loc.Auto; }
+    }
+
+    public bool IsLanguageTurkish
+    {
+        get => Language == Loc.Turkish;
+        set { if (value) Language = Loc.Turkish; }
+    }
+
+    public bool IsLanguageEnglish
+    {
+        get => Language == Loc.English;
+        set { if (value) Language = Loc.English; }
+    }
+
+    partial void OnLanguageChanged(string value)
+    {
+        OnPropertyChanged(nameof(IsLanguageAuto));
+        OnPropertyChanged(nameof(IsLanguageTurkish));
+        OnPropertyChanged(nameof(IsLanguageEnglish));
     }
 
     public ObservableCollection<SearchSourceItem> Sources { get; } = [];
@@ -195,7 +310,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     public bool HasHiddenPrograms => HiddenPrograms.Count > 0;
 
     /// <summary>Uygulama sürümü (<see cref="AssemblyInformationalVersionAttribute"/>; derleme meta verisi kısaltılır).</summary>
-    public string AppVersion { get; } = FormatVersion(
+    public string AppVersion => FormatVersion(
         typeof(SettingsViewModel).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion);
 
     public string RepositoryLink => RepositoryUrl;
@@ -204,7 +319,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
     {
         if (string.IsNullOrWhiteSpace(informational))
         {
-            return "bilinmiyor";
+            return Loc.T("about.versionUnknown");
         }
 
         // "1.0.0+<commit>" → "1.0.0 (abc1234)"
@@ -236,7 +351,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         }
         catch (Exception ex)
         {
-            SetStatus("Bağlantı açılamadı: " + ex.Message, isError: true, autoClear: false);
+            SetStatus(Loc.T("settings.linkFailed", ex.Message), isError: true, autoClear: false);
         }
     }
 
@@ -325,6 +440,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         Backdrop = draft.Backdrop;
         HideOnFocusLost = draft.HideOnFocusLost;
         StartOnSystemStartup = draft.StartOnSystemStartup;
+        Language = Loc.NormalizeSetting(draft.Language);
         Sources.Clear();
         foreach (var s in draft.SearchSources)
         {
@@ -386,12 +502,13 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         draft.Backdrop = Backdrop;
         draft.HideOnFocusLost = HideOnFocusLost;
         draft.StartOnSystemStartup = StartOnSystemStartup;
+        draft.Language = Language;
         draft.SearchSources = Sources.Select(s => s.ToSource()).ToList();
         draft.DisabledPlugins = [.. _unknownDisabled, .. Plugins.Where(p => !p.IsEnabled).Select(p => p.Id)];
 
         var result = _service.Apply(draft);
         var isError = !result.Success || result.Error is not null;   // başarıyla dönen Error bir uyarıdır
-        var message = result.Success ? result.Error ?? "Ayarlar uygulandı." : result.Error ?? "Ayarlar uygulanamadı.";
+        var message = result.Success ? result.Error ?? Loc.T("settings.applied") : result.Error ?? Loc.T("settings.applyFailed");
         SetStatus(message, isError, autoClear: !isError);   // yalnızca düz başarı kaybolur; hata/uyarı kalır
         return result.Success;
     }
@@ -405,6 +522,7 @@ public sealed partial class SettingsViewModel : ObservableObject, IDisposable
         }
 
         _disposed = true;
+        _languageSubscription?.Dispose();
         _messageTimer?.Dispose();
         _messageTimer = null;
         if (_usage is not null)

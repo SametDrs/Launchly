@@ -92,12 +92,12 @@ public class ThemeTests
     // ---- Settings.Normalize: v1 → v2 geçişi ----
 
     [Fact]
-    public void NewSettings_AreVersion3_WithAcrylic()
+    public void NewSettings_AreVersion4_WithAcrylic()
     {
         var s = new Settings();
 
-        Assert.Equal(3, Settings.CurrentVersion);
-        Assert.Equal(3, s.Version);
+        Assert.Equal(4, Settings.CurrentVersion);
+        Assert.Equal(4, s.Version);
         Assert.Equal(BackdropType.Acrylic, s.Backdrop);
         Assert.Equal(BackdropType.Acrylic, s.Normalize().Backdrop);
     }
@@ -119,7 +119,7 @@ public class ThemeTests
         var s = new JsonStorage<Settings>(path).Load().Normalize();
 
         Assert.Equal(expected, s.Backdrop);
-        Assert.Equal(3, s.Version);
+        Assert.Equal(4, s.Version);
     }
 
     [Fact]
@@ -135,7 +135,7 @@ public class ThemeTests
         storage.Save(first);
 
         var text = File.ReadAllText(path);
-        Assert.Contains("\"Version\": 3", text);
+        Assert.Contains("\"Version\": 4", text);
         Assert.Contains("\"Backdrop\": \"Acrylic\"", text);
 
         // Kullanıcı sonra Mica seçer: yeniden açılışta Mica kalır.
@@ -143,11 +143,11 @@ public class ThemeTests
         storage.Save(first);
         var second = storage.Load().Normalize();
         Assert.Equal(BackdropType.Mica, second.Backdrop);
-        Assert.Equal(3, second.Version);
+        Assert.Equal(4, second.Version);
     }
 
     [Fact]
-    public void Version_StaysAt3_AfterCreateDraftAndApply()
+    public void Version_StaysAt4_AfterCreateDraftAndApply()
     {
         using var dir = new TempDir();
         var storage = new JsonStorage<Settings>(Path.Combine(dir.Path, "settings.json"));
@@ -156,14 +156,14 @@ public class ThemeTests
         var service = new SettingsService(live, storage, new OkHotkey(), new NoAutoStart(), manager);
 
         var draft = service.CreateDraft();
-        Assert.Equal(3, draft.Version);
+        Assert.Equal(4, draft.Version);
         draft.Backdrop = BackdropType.Mica;
         Assert.True(service.Apply(draft).Success);
 
-        Assert.Equal(3, live.Version);
+        Assert.Equal(4, live.Version);
         Assert.Equal(BackdropType.Mica, live.Backdrop);
         var reloaded = storage.Load();
-        Assert.Equal(3, reloaded.Version);
+        Assert.Equal(4, reloaded.Version);
         Assert.Equal(BackdropType.Mica, reloaded.Normalize().Backdrop);
     }
 
@@ -358,7 +358,7 @@ public sealed class PluginToggleAndPagesTests : IDisposable
             vm.Plugins.Select(p => p.Id).Order(StringComparer.Ordinal));
         Assert.All(vm.Plugins, p => Assert.True(p.IsEnabled));
         Assert.Equal("f", vm.Plugins.Single(p => p.Id == FilesId).Keywords);
-        Assert.Equal("Global", vm.Plugins.Single(p => p.Id == "g").Keywords);
+        Assert.Equal("Genel", vm.Plugins.Single(p => p.Id == "g").Keywords);   // tr (testlerin sabit dili)
     }
 
     [Fact]
@@ -513,11 +513,11 @@ public sealed class PluginToggleAndPagesTests : IDisposable
     }
 
     [Theory]
-    [InlineData(new[] { "*" }, "Global")]
-    [InlineData(new[] { "*", "g", "yt" }, "Global · g, yt")]
+    [InlineData(new[] { "*" }, "Genel")]
+    [InlineData(new[] { "*", "g", "yt" }, "Genel · g, yt")]
     [InlineData(new string[0], "—")]
     [InlineData(new[] { "f", " " }, "f")]
-    public void FormatKeywords_Variants(string[] keywords, string expected) =>
+    public void FormatKeywords_Variants(string[] keywords, string expected) =>   // tr (testlerin sabit dili)
         Assert.Equal(expected, PluginToggleItem.FormatKeywords(keywords));
 
     [Fact]

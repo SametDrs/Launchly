@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Launchly.Core.Localization;
 using Launchly.Plugin;
 using Launchly.Plugins.WebSearch;
 using Microsoft.Extensions.Logging;
@@ -85,7 +86,7 @@ public sealed class UrlPlugin : IPlugin
         _logger = logger ?? NullLogger.Instance;
     }
 
-    public PluginMetadata Metadata { get; } = new() { Id = PluginId, Name = "URL", Description = "Yazdığın web adresini varsayılan tarayıcıda açar." };
+    public PluginMetadata Metadata => new() { Id = PluginId, Name = Loc.T("plugin.url.name"), Description = Loc.T("plugin.url.desc") };
 
     public Task InitAsync(PluginContext context) => Task.CompletedTask;
 
@@ -98,11 +99,11 @@ public sealed class UrlPlugin : IPlugin
 
         var result = new Result
         {
-            Title = "Open URL",
+            Title = Loc.T("url.open"),
             SubTitle = url,
             Icon = "", // Globe
             Score = 850,
-            TypeLabel = "URL",
+            TypeLabel = Loc.T("type.url"),
             AutoComplete = query.Raw.Trim(),
             Action = () => Task.FromResult(Open(url)),
         };

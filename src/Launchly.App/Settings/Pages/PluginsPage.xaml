@@ -1,11 +1,12 @@
 <UserControl x:Class="Launchly.App.SettingsUi.Pages.PluginsPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:Launchly.App.Localization"
              x:Name="Root">
     <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
         <StackPanel Margin="28,22,28,20">
-            <TextBlock Text="Eklentiler" Style="{StaticResource PageTitleStyle}" />
-            <TextBlock Text="Kapalı eklentiler aramada sonuç vermez ve anahtar kelimeleri boşa çıkar. Uygula'ya basınca hemen geçerli olur."
+            <TextBlock Text="{loc:T plugins.title}" Style="{StaticResource PageTitleStyle}" />
+            <TextBlock Text="{loc:T plugins.hint}"
                        Style="{StaticResource HintTextStyle}" Margin="0,0,0,14" />
 
             <ItemsControl ItemsSource="{Binding Plugins}">
@@ -34,10 +35,10 @@
                                             </TextBlock.Style>
                                         </TextBlock>
                                         <TextBlock FontSize="12" Foreground="{StaticResource SubTextBrush}" Margin="0,2,0,0" TextTrimming="CharacterEllipsis">
-                                            <Run Text="{Binding Id, Mode=OneWay}" /><Run Text="  ·  Anahtar kelime: " /><Run Text="{Binding Keywords, Mode=OneWay}" />
+                                            <Run Text="{Binding Id, Mode=OneWay}" /><Run Text="{loc:T plugins.keywordLabel}" /><Run Text="{Binding Keywords, Mode=OneWay}" />
                                         </TextBlock>
                                     </StackPanel>
-                                    <CheckBox Grid.Column="1" Content="Etkin" IsChecked="{Binding IsEnabled}"
+                                    <CheckBox Grid.Column="1" Content="{loc:T plugins.enabled}" IsChecked="{Binding IsEnabled}"
                                               Style="{StaticResource ToggleSwitchStyle}" VerticalAlignment="Center"
                                               AutomationProperties.Name="{Binding Name}" />
                                 </Grid>
@@ -55,10 +56,10 @@
                                         </Style>
                                     </StackPanel.Style>
                                     <Border Height="1" Background="{StaticResource DividerBrush}" Margin="0,0,0,12" />
-                                    <TextBlock Text="Gizlenen uygulamalar" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Margin="0,0,0,4" />
-                                    <TextBlock Text="Eylem menüsünden (Ctrl+K) gizlenen uygulamalar aramada çıkmaz. &quot;Göster&quot; hemen uygulanır; &quot;Geri al&quot; bunu geri almaz."
+                                    <TextBlock Text="{loc:T plugins.hidden.title}" FontSize="13" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" Margin="0,0,0,4" />
+                                    <TextBlock Text="{loc:T plugins.hidden.hint}"
                                                Style="{StaticResource HintTextStyle}" Margin="0,0,0,8" />
-                                    <TextBlock Text="Gizlenen uygulama yok." FontSize="13" Foreground="{StaticResource SubTextBrush}">
+                                    <TextBlock Text="{loc:T plugins.hidden.none}" FontSize="13" Foreground="{StaticResource SubTextBrush}">
                                         <TextBlock.Style>
                                             <Style TargetType="TextBlock">
                                                 <Setter Property="Visibility" Value="Visible" />
@@ -80,7 +81,7 @@
                                                     </Grid.ColumnDefinitions>
                                                     <TextBlock Grid.Column="0" Text="{Binding Name}" FontSize="13" Foreground="{StaticResource TextBrush}"
                                                                VerticalAlignment="Center" TextTrimming="CharacterEllipsis" ToolTip="{Binding Id}" />
-                                                    <Button Grid.Column="1" Content="Göster" Style="{StaticResource PushButtonStyle}"
+                                                    <Button Grid.Column="1" Content="{loc:T plugins.hidden.show}" Style="{StaticResource PushButtonStyle}"
                                                             Tag="{Binding}" Click="OnUnhideProgram" />
                                                 </Grid>
                                             </DataTemplate>

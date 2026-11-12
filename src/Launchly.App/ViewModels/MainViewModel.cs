@@ -1,4 +1,5 @@
 using CommunityToolkit.Mvvm.ComponentModel;
+using Launchly.Core.Localization;
 using Launchly.Core.Plugins;
 using Launchly.Plugin;
 using Microsoft.Extensions.Logging;
@@ -332,7 +333,7 @@ public sealed partial class MainViewModel : ObservableObject
         var list = new List<ResultAction>();
         if (result.Action is { } open)
         {
-            list.Add(new ResultAction { Title = "Aç", Glyph = "", Execute = open });   // OpenInNewWindow
+            list.Add(new ResultAction { Title = Loc.T("action.open"), Glyph = "", Execute = open });   // OpenInNewWindow
         }
 
         foreach (var action in result.ContextActions ?? [])

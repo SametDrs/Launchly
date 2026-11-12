@@ -1,4 +1,5 @@
 using Launchly.Core;
+using Launchly.Core.Localization;
 using Launchly.Core.Querying;
 using Launchly.Plugin;
 using Microsoft.Extensions.Logging;
@@ -37,8 +38,8 @@ public sealed class WebSearchPlugin : IPlugin
     public PluginMetadata Metadata => new()
     {
         Id = PluginId,
-        Name = "Web Search",
-        Description = "Arama kaynaklarının anahtar kelimesiyle (ör. google, youtube) web'de arama yapar.",
+        Name = Loc.T("plugin.websearch.name"),
+        Description = Loc.T("plugin.websearch.desc"),
         ActionKeywords = ActiveSources(_settings.SearchSources)
             .Select(s => s.ActionKeyword.Trim())
             .Distinct(KeywordComparer.Instance)
@@ -100,7 +101,7 @@ public sealed class WebSearchPlugin : IPlugin
             result = new Result
             {
                 Title = source.Title,
-                SubTitle = "Aramak için yazın",
+                SubTitle = Loc.T("websearch.typeToSearch"),
                 Icon = IconOf(source),
                 Score = 1000,
                 TypeLabel = "Alt+1",
@@ -113,7 +114,7 @@ public sealed class WebSearchPlugin : IPlugin
             result = new Result
             {
                 Title = search,
-                SubTitle = $"Search {source.Title}",
+                SubTitle = Loc.T("websearch.searchIn", source.Title),
                 Icon = IconOf(source),
                 Score = 1000,
                 TypeLabel = "Alt+1",
@@ -130,7 +131,7 @@ public sealed class WebSearchPlugin : IPlugin
         var url = source.UrlTemplate.Trim();
         return new Result
         {
-            Title = $"{source.Title} sitesini aç",
+            Title = Loc.T("websearch.openSite", source.Title),
             SubTitle = url,
             Icon = IconOf(source),
             Score = score,

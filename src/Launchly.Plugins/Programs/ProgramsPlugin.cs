@@ -2,6 +2,7 @@ using System.ComponentModel;
 using Launchly.Core;
 using Launchly.Core.Querying;
 using Launchly.Core.Storage;
+using Launchly.Core.Localization;
 using Launchly.Plugin;
 using Launchly.Plugins.Calculator;
 using Microsoft.Extensions.Logging;
@@ -78,11 +79,11 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
         _defaultBrowser = defaultBrowser ?? (() => null);
     }
 
-    public PluginMetadata Metadata { get; } = new()
+    public PluginMetadata Metadata => new()
     {
         Id = PluginId,
-        Name = "Programs",
-        Description = "Yüklü uygulamaları ve kısayolları bulup başlatır; anahtar kelime gerekmez.",
+        Name = Loc.T("plugin.programs.name"),
+        Description = Loc.T("plugin.programs.desc"),
         ActionKeywords = [PluginMetadata.GlobalKeyword],
         HandlesEmptyQuery = true,
     };
@@ -178,7 +179,7 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
                 Title = entry.Name,
                 SubTitle = entry.TargetPath,
                 Score = score,
-                TypeLabel = "Application",
+                TypeLabel = Loc.T("type.application"),
                 IconImage = IconFor(entry),
                 Action = () => Task.FromResult(TryLaunch(captured, asAdmin: false)),
                 ContextActions = BuildActions(captured),
@@ -373,7 +374,7 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
             actions.Add(new ResultAction
             {
                 Id = ResultAction.RunAsAdminId,
-                Title = "Yönetici olarak çalıştır",
+                Title = Loc.T("action.runAsAdmin"),
                 Glyph = "",   // Admin
                 Hint = "Ctrl+Shift+Enter",
                 Execute = () => Task.FromResult(TryLaunch(entry, asAdmin: true)),
@@ -384,7 +385,7 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
         {
             actions.Add(new ResultAction
             {
-                Title = "Dosya konumunu aç",
+                Title = Loc.T("action.reveal"),
                 Glyph = "",   // FolderOpen
                 Execute = () => Task.FromResult(TryReveal(reveal)),
             });
@@ -394,7 +395,7 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
         {
             actions.Add(new ResultAction
             {
-                Title = "Yolu kopyala",
+                Title = Loc.T("action.copyPath"),
                 Glyph = "",   // Copy
                 Execute = () => Task.FromResult(TryCopy(clipboard, copy)),
             });
@@ -404,7 +405,7 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
         var name = entry.Name;
         actions.Add(new ResultAction
         {
-            Title = "Gizle",
+            Title = Loc.T("action.hide"),
             Glyph = "",   // Hide
             RequeryAfter = true,
             Execute = () => Task.FromResult(ChangePrefs(() => _usage.Hide(id, name), id)),
@@ -414,7 +415,7 @@ public sealed class ProgramsPlugin : IPlugin, IDisposable
         var pinned = _usage.IsPinned(id);
         actions.Add(new ResultAction
         {
-            Title = pinned ? "Sabitlemeyi kaldır" : "Sabitle",
+            Title = pinned ? Loc.T("action.unpin") : Loc.T("action.pin"),
             Glyph = pinned ? "" : "",   // Unpin / Pin
             RequeryAfter = true,
             Execute = () => Task.FromResult(ChangePrefs(() => pinned ? _usage.Unpin(id) : _usage.Pin(id), id)),

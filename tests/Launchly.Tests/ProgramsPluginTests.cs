@@ -225,6 +225,7 @@ public sealed class ProgramsPluginTests : IDisposable
     [Fact]
     public async Task Query_Prefix_RanksVisualStudioCodeFirst_AndHasTypeLabel()
     {
+        using var _ = TestLanguage.Use("en");   // tür etiketi "Application"
         var plugin = await InitializedAsync(["Visual Studio Code", "Notepad", "Calculator", "Voice Recorder"]);
 
         var results = await Query(plugin, "visual");

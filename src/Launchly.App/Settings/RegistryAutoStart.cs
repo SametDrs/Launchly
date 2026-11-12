@@ -1,4 +1,5 @@
 using Launchly.Core;
+using Launchly.Core.Localization;
 using Microsoft.Win32;
 
 namespace Launchly.App.SettingsUi;
@@ -20,7 +21,7 @@ public sealed class RegistryAutoStart : IAutoStart
         using var key = Registry.CurrentUser.CreateSubKey(RunKey, writable: true);
         if (enabled)
         {
-            var exe = Environment.ProcessPath ?? throw new InvalidOperationException("Çalıştırılabilir dosya yolu bulunamadı.");
+            var exe = Environment.ProcessPath ?? throw new InvalidOperationException(Loc.T("autostart.noExe"));
             key.SetValue(ValueName, $"\"{exe}\"", RegistryValueKind.String);
         }
         else

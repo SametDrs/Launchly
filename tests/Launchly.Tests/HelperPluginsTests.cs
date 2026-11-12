@@ -137,6 +137,7 @@ public sealed class HelperPluginsTests : IDisposable
     [Fact]
     public async Task Url_Plugin_ActionOpensNormalizedUrl()
     {
+        using var _ = TestLanguage.Use("en");
         var opener = new FakeUrlOpener();
         var plugin = new UrlPlugin(opener, NullLogger.Instance);
 
@@ -179,6 +180,7 @@ public sealed class HelperPluginsTests : IDisposable
     [InlineData("sleep", "Sleep", "sleep")]
     public async Task System_SafeCommands_RunWithoutConfirmation(string search, string title, string call)
     {
+        using var _ = TestLanguage.Use("en");   // başlıklar İngilizce ("Lock", "Sleep")
         var sys = new FakeSystem();
         var confirm = new FakeConfirm(false);
         var plugin = new SystemPlugin(sys, confirm, NullLogger.Instance);

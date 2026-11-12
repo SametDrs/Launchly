@@ -3,26 +3,25 @@ using System.Windows.Forms;
 
 namespace Launchly.App.Tray;
 
-/// <summary>Bildirim alanı simgesi: sol tık pencereyi aç/kapatır, menüden çıkış.</summary>
+/// <summary>Bildirim alanı simgesi: sol tık pencereyi aç/kapatır, menüden ayarlar ve çıkış.</summary>
 public sealed class TrayIcon : IDisposable
 {
     public const string IconUri = "pack://application:,,,/Assets/Launchly.ico";
 
     private readonly NotifyIcon _icon;
     private readonly Icon _image;
+    private readonly TrayMenu _menu;
 
     public TrayIcon(Action toggle, Action settings, Action exit)
     {
-        var menu = new ContextMenuStrip();
-        menu.Items.Add("Settings", null, (_, _) => settings());
-        menu.Items.Add("Çıkış", null, (_, _) => exit());
+        _menu = new TrayMenu(settings, exit);
 
         _image = LoadIcon();
         _icon = new NotifyIcon
         {
             Icon = _image,
             Text = "Launchly",
-            ContextMenuStrip = menu,
+            ContextMenuStrip = _menu.Strip,
             Visible = true,
         };
         _icon.MouseClick += (_, e) =>
@@ -50,7 +49,8 @@ public sealed class TrayIcon : IDisposable
     public void Dispose()
     {
         _icon.Visible = false;
-        _icon.ContextMenuStrip?.Dispose();
+        _icon.ContextMenuStrip = null;
+        _menu.Dispose();
         _icon.Dispose();
         _image.Dispose();
     }

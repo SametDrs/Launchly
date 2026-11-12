@@ -1,3 +1,4 @@
+using Launchly.Core.Localization;
 using Launchly.Core.Plugins;
 using Launchly.Core.Querying;
 using Launchly.Core.Storage;
@@ -70,7 +71,7 @@ public sealed class SettingsService
         SearchSources = (_live.SearchSources ?? []).Where(s => s is not null).Select(s => s.Clone()).ToList(),
         HideOnFocusLost = _live.HideOnFocusLost,
         StartOnSystemStartup = _live.StartOnSystemStartup,
-        Language = _live.Language,
+        Language = Loc.NormalizeSetting(_live.Language),
     };
 
     /// <param name="reservedKeywords">Başka eklentilerin anahtar kelimeleri; etkin bir kaynak bunlardan birini alamaz (null: denetlenmez).</param>
@@ -78,7 +79,7 @@ public sealed class SettingsService
     {
         if (!HotkeyParser.TryParse(draft.Hotkey, out _))
         {
-            error = $"\"{draft.Hotkey}\" geçerli bir kısayol değil (Ctrl, Alt ya da Win'den en az biri ve bir tuş gerekir).";
+            error = Loc.T("validate.hotkey", draft.Hotkey);
             return false;
         }
 
@@ -88,10 +89,10 @@ public sealed class SettingsService
         foreach (var source in draft.SearchSources)
         {
             row++;
-            var label = string.IsNullOrWhiteSpace(source.Title) ? $"{row}. satır" : $"{row}. satır (\"{source.Title.Trim()}\")";
+            var label = string.IsNullOrWhiteSpace(source.Title) ? Loc.T("validate.row", row) : Loc.T("validate.rowTitled", row, source.Title.Trim());
             if (!source.TryValidate(out var sourceError))
             {
-                error = $"{label}: {sourceError}";
+                error = Loc.T("validate.rowError", label, sourceError);
                 return false;
             }
 
@@ -103,13 +104,13 @@ public sealed class SettingsService
             var keyword = source.ActionKeyword.Trim();
             if (reserved.Contains(keyword))
             {
-                error = $"{label}: \"{keyword}\" anahtar kelimesi başka bir eklentiye ait; farklı bir kelime seçin.";
+                error = Loc.T("validate.keywordReserved", label, keyword);
                 return false;
             }
 
             if (!seen.Add(keyword))
             {
-                error = $"{label}: \"{keyword}\" anahtar kelimesi birden fazla etkin kaynakta kullanılıyor.";
+                error = Loc.T("validate.keywordDuplicate", label, keyword);
                 return false;
             }
         }
@@ -139,12 +140,12 @@ public sealed class SettingsService
             {
                 // Eski kayıt kaydedici tarafından bırakılmış olabilir: eskisini geri yükle.
                 RestoreHotkey(oldHotkey);
-                return new SettingsApplyResult(false, hotkeyError ?? "Kısayol kaydedilemedi.");
+                return new SettingsApplyResult(false, hotkeyError ?? Loc.T("service.hotkeyFailed"));
             }
         }
         else if (!_hotkey.IsRegistered && !_hotkey.TryRegister(draft.Hotkey, out var retryError))
         {
-            hotkeyWarning = retryError ?? "Kısayol kaydedilemedi.";
+            hotkeyWarning = retryError ?? Loc.T("service.hotkeyFailed");
             _logger.LogWarning("Kısayol yeniden kaydedilemedi: {Error}", hotkeyWarning);
         }
 
@@ -162,7 +163,7 @@ public sealed class SettingsService
                     RestoreHotkey(oldHotkey);
                 }
 
-                return new SettingsApplyResult(false, "Otomatik başlatma ayarı yazılamadı: " + ex.Message);
+                return new SettingsApplyResult(false, Loc.T("service.autostartFailed", ex.Message));
             }
         }
 
@@ -170,10 +171,12 @@ public sealed class SettingsService
         _live.Backdrop = draft.Backdrop;
         _live.HideOnFocusLost = draft.HideOnFocusLost;
         _live.StartOnSystemStartup = draft.StartOnSystemStartup;
+        _live.Language = Loc.NormalizeSetting(draft.Language);
         _live.SearchSources = draft.SearchSources.Select(s => s.Clone()).ToList();
         // Yeni liste atanır, yerinde değiştirilmez: PluginManager.IsEnabled sorgu iş parçacığında eski listeyi okuyabilir.
         // Bilinmeyen Id'ler (kaldırılmış eklenti) olduğu gibi korunur.
         _live.DisabledPlugins = (draft.DisabledPlugins ?? []).Where(id => id is not null).Distinct(StringComparer.Ordinal).ToList();
+        Loc.SetLanguage(_live.Language);   // açık pencereler, tray ve sonraki sonuçlar yeniden başlatmadan yeni dile geçer
 
         try
         {
@@ -184,10 +187,10 @@ public sealed class SettingsService
             _logger.LogError(ex, "Ayarlar kaydedilemedi");
             _plugins.RefreshKeywords();
             Applied?.Invoke(_live);
-            var saveError = "Ayarlar uygulandı ancak dosyaya yazılamadı: " + ex.Message;
+            var saveError = Loc.T("service.saveFailed", ex.Message);
             if (hotkeyWarning is not null)
             {
-                saveError += " Ayrıca kısayol kaydedilemedi: " + hotkeyWarning;
+                saveError += Loc.T("service.saveFailedHotkey", hotkeyWarning);
             }
 
             return new SettingsApplyResult(false, saveError);
@@ -195,7 +198,7 @@ public sealed class SettingsService
 
         _plugins.RefreshKeywords();
         Applied?.Invoke(_live);
-        return new SettingsApplyResult(true, hotkeyWarning is null ? null : "Ayarlar kaydedildi ancak kısayol kaydedilemedi: " + hotkeyWarning);
+        return new SettingsApplyResult(true, hotkeyWarning is null ? null : Loc.T("service.hotkeyWarning", hotkeyWarning));
     }
 
     private void RestoreHotkey(string hotkey)

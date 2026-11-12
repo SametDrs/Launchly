@@ -54,6 +54,7 @@ public sealed class WebSearchPluginTests : IDisposable
     [InlineData("a&b?c=d", "https://www.youtube.com/results?search_query=a%26b%3Fc%3Dd")]
     public async Task Query_BuildsEncodedUrl_AndActionOpensIt(string search, string expected)
     {
+        using var _ = TestLanguage.Use("en");   // beklenen alt yazı İngilizce
         var opener = new FakeOpener();
         var plugin = Create(new Settings(), opener);
 

@@ -1,6 +1,7 @@
 using System.Windows.Controls;
 using System.Windows.Input;
 using Launchly.Core;
+using Launchly.Core.Localization;
 
 namespace Launchly.App.SettingsUi.Pages;
 
@@ -53,7 +54,7 @@ public partial class GeneralPage : UserControl
         if (!viewModel.TryCaptureHotkey(mods, vk))
         {
             viewModel.IsError = true;
-            viewModel.Message = "Bu tuş birleşimi kısayol olamaz (Ctrl, Alt ya da Win'den en az biri ve desteklenen bir tuş gerekir).";
+            viewModel.Message = Loc.T("general.hotkey.invalid");
             return;
         }
 

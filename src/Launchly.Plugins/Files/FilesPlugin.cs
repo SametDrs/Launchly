@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Launchly.Core.Localization;
 using Launchly.Core.Querying;
 using Launchly.Plugin;
 using Launchly.Plugins.Calculator;
@@ -57,11 +58,11 @@ public sealed class FilesPlugin : IPlugin
         _logger = logger ?? NullLogger.Instance;
     }
 
-    public PluginMetadata Metadata { get; } = new()
+    public PluginMetadata Metadata => new()
     {
         Id = PluginId,
-        Name = "Files",
-        Description = "Anahtar kelime: f. Klasörlerdeki dosyaları adıyla arar ve açar.",
+        Name = Loc.T("plugin.files.name"),
+        Description = Loc.T("plugin.files.desc"),
         ActionKeywords = [Keyword],
         SearchDelayMs = 120,
     };
@@ -116,7 +117,7 @@ public sealed class FilesPlugin : IPlugin
                     SubTitle = path,
                     Icon = h.IsDir ? "" : "", // Folder / Page
                     Score = h.Score,
-                    TypeLabel = h.IsDir ? "Folder" : "File",
+                    TypeLabel = h.IsDir ? Loc.T("type.folder") : Loc.T("type.file"),
                     Action = () => Task.FromResult(Open(path)),
                     ContextActions = BuildActions(path),
                 };
@@ -181,7 +182,7 @@ public sealed class FilesPlugin : IPlugin
         {
             new()
             {
-                Title = "Dosya konumunu aç",
+                Title = Loc.T("action.reveal"),
                 Glyph = "",   // FolderOpen
                 Execute = () => Task.FromResult(Reveal(path)),
             },
@@ -191,7 +192,7 @@ public sealed class FilesPlugin : IPlugin
         {
             actions.Add(new ResultAction
             {
-                Title = "Yolu kopyala",
+                Title = Loc.T("action.copyPath"),
                 Glyph = "",   // Copy
                 Execute = () => Task.FromResult(Copy(clipboard, path)),
             });

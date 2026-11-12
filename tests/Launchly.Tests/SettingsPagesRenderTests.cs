@@ -2,9 +2,12 @@ using System.Runtime.ExceptionServices;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Threading;
 using Launchly.App.SettingsUi;
 using Launchly.App.SettingsUi.Pages;
+using Launchly.App.Interop;
 using Launchly.Core;
+using Launchly.Core.Localization;
 using Launchly.Core.Storage;
 
 namespace Launchly.Tests;
@@ -98,8 +101,55 @@ public class SettingsPagesRenderTests
         return count;
     }
 
+
+    // Her dilde: sayfa başlığı ve sayfada görünmesi gereken bir metin (sayfa sırası: Genel, Görünüm, Kaynaklar, Eklentiler, Hakkında).
+    private static readonly Dictionary<string, (string Title, string Expected)[]> ExpectedTexts = new()
+    {
+        ["tr"] =
+        [
+            ("Genel", "Kısayol"),
+            ("Görünüm", "Windows 11 22H2 ve sonrası gerekir"),
+            ("Arama kaynakları", "Adreste {q} varsa arama yapar, yoksa siteyi açar."),
+            ("Eklentiler", "launchly.files"),
+            ("Hakkında", "Üretici: Samet Dursun"),
+        ],
+        ["en"] =
+        [
+            ("General", "Hotkey"),
+            ("Appearance", "Windows 11 22H2 or later is required"),
+            ("Search sources", "If the address contains {q} it searches, otherwise it opens the site."),
+            ("Plugins", "launchly.files"),
+            ("About", "Made by: Samet Dursun"),
+        ],
+    };
+
+    private static FrameworkElement[] CreatePages() =>
+        [new GeneralPage(), new AppearancePage(), new SearchSourcesPage(), new PluginsPage(), new AboutPage()];
+
+    private static void Flush() =>
+        Dispatcher.CurrentDispatcher.Invoke(DispatcherPriority.Background, new Action(() => { }));
+
+    // Sayfayı çizer ve görünen metinleri toplar. Karşı dile ait (yalnızca o dilde farklı olan) metin kalmamalıdır.
+    private static void AssertPage(FrameworkElement page, SettingsViewModel vm, string language, (string Title, string Expected) expected)
+    {
+        page.DataContext = vm;
+        page.Measure(new Size(680, 520));
+        page.Arrange(new Rect(0, 0, 680, 520));
+        page.UpdateLayout();
+
+        var texts = new List<string>();
+        Assert.True(CountTextBlocks(page, texts) > 0, $"[{language}] {expected.Title} sayfası boş çizildi");
+        Assert.Contains(expected.Title, texts);
+        Assert.True(texts.Exists(t => t.Contains(expected.Expected, StringComparison.Ordinal)),
+            $"[{language}] {expected.Title} sayfasında '{expected.Expected}' yok. Görünen metinler: {string.Join(" | ", texts)}");
+
+        var foreign = LocTestData.ForeignOnly(language);
+        var mixed = texts.Where(t => foreign.Contains(t.Trim())).ToList();
+        Assert.True(mixed.Count == 0, $"[{language}] {expected.Title} sayfasında karşı dilden metin var: {string.Join(" | ", mixed)}");
+    }
+
     [Fact]
-    public void AllPages_LoadWithTheme_AndShowTheirTitle()
+    public void AllPages_RenderInBothLanguages_AndSwitchWithoutRestart()
     {
         RunSta(() =>
         {
@@ -112,35 +162,60 @@ public class SettingsPagesRenderTests
                 using var manager = TestHelpers.CreateManager([new FakePlugin("launchly.files", ["f"], (_, _) => FakePlugin.Results())], settings);
                 var ok = new Ok();
                 var service = new SettingsService(settings, new JsonStorage<Settings>(Path.Combine(dir, "settings.json")), ok, ok, manager);
-                using var vm = new SettingsViewModel(service, null, () => manager.Plugins, () => (false, "Windows 11 22H2 ve sonrası gerekir"));
+                using var vm = new SettingsViewModel(service, null, () => manager.Plugins, () => (false, WindowBackdrop.UnsupportedReason));
 
-                var pages = new (FrameworkElement Page, string Title, string Expected)[]
+                // Aynı sayfa örnekleri tr -> en -> tr: dil çalışırken değişir, yeniden oluşturma yoktur.
+                var pages = CreatePages();
+                foreach (var language in new[] { "tr", "en", "tr" })
                 {
-                    (new GeneralPage(), "Genel", "Kısayol"),
-                    (new AppearancePage(), "Görünüm", "Windows 11 22H2 ve sonrası gerekir"),
-                    (new SearchSourcesPage(), "Arama kaynakları", "Adreste {q} varsa arama yapar, yoksa siteyi açar."),
-                    (new PluginsPage(), "Eklentiler", "launchly.files"),
-                    (new AboutPage(), "Hakkında", "Üretici: Samet Dursun"),
-                };
+                    Loc.SetLanguage(language);
+                    Flush();
+                    for (var i = 0; i < pages.Length; i++)
+                    {
+                        AssertPage(pages[i], vm, language, ExpectedTexts[language][i]);
+                    }
+                }
 
-                foreach (var (page, title, expected) in pages)
+                AssertPlaceholderAndMarkupExtensionFollowLanguage();
+
+                // Dil en iken yeni oluşturulan sayfalar da baştan İngilizce çizilir.
+                Loc.SetLanguage("en");
+                Flush();
+                var fresh = CreatePages();
+                for (var i = 0; i < fresh.Length; i++)
                 {
-                    page.DataContext = vm;
-                    page.Measure(new Size(680, 520));
-                    page.Arrange(new Rect(0, 0, 680, 520));
-                    page.UpdateLayout();
-
-                    var texts = new List<string>();
-                    Assert.True(CountTextBlocks(page, texts) > 0, $"{title} sayfası boş çizildi");
-                    Assert.Contains(title, texts);
-                    Assert.True(texts.Exists(t => t.Contains(expected, StringComparison.Ordinal)),
-                        $"{title} sayfasında '{expected}' yok. Görünen metinler: {string.Join(" | ", texts)}");
+                    AssertPage(fresh[i], vm, "en", ExpectedTexts["en"][i]);
                 }
             }
             finally
             {
+                Loc.SetLanguage("tr");
                 Directory.Delete(dir, recursive: true);
             }
         });
+    }
+
+    // AllPages testinin STA iş parçacığında çağrılır (Application ve tema kaynakları tek iş parçacığına aittir).
+    private static void AssertPlaceholderAndMarkupExtensionFollowLanguage()
+    {
+        Loc.SetLanguage("tr");
+        Flush();
+        var box = new TextBox { Style = (Style)Application.Current.FindResource("SearchTextBoxStyle") };
+        box.Measure(new Size(400, 60));
+        box.Arrange(new Rect(0, 0, 400, 60));
+        box.UpdateLayout();
+        var placeholder = (TextBlock)box.Template.FindName("Placeholder", box);
+        Assert.Equal("Aramak için yazın…", placeholder.Text);
+
+        var button = (Button)System.Windows.Markup.XamlReader.Parse(
+            "<Button xmlns=\"http://schemas.microsoft.com/winfx/2006/xaml/presentation\" " +
+            "xmlns:loc=\"clr-namespace:Launchly.App.Localization;assembly=Launchly\" Content=\"{loc:T main.settings}\" />");
+        Assert.Equal("Ayarlar", button.Content);
+
+        Loc.SetLanguage("en");
+        Flush();
+
+        Assert.Equal("Type to search…", placeholder.Text);
+        Assert.Equal("Settings", button.Content);
     }
 }

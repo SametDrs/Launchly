@@ -2,7 +2,8 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:local="clr-namespace:Launchly.App.SettingsUi"
-        Title="Launchly Ayarları"
+        xmlns:loc="clr-namespace:Launchly.App.Localization"
+        Title="{loc:T settings.window.title}"
         Icon="pack://application:,,,/Assets/Launchly.ico"
         Width="900" Height="600" MinWidth="760" MinHeight="500"
         WindowStartupLocation="CenterScreen"
@@ -34,35 +35,35 @@
                          ItemContainerStyle="{StaticResource NavItemStyle}"
                          SelectedValuePath="Tag"
                          SelectedValue="{Binding SelectedPage, Mode=TwoWay}"
-                         AutomationProperties.Name="Ayar sayfaları">
+                         AutomationProperties.Name="{loc:T settings.nav.automation}">
                     <ListBoxItem Tag="{x:Static local:SettingsPage.General}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE713;" FontFamily="{StaticResource IconFont}" FontSize="16" Width="28" VerticalAlignment="Center" />
-                            <TextBlock Text="Genel" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:T nav.general}" FontSize="14" VerticalAlignment="Center" />
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem Tag="{x:Static local:SettingsPage.Appearance}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE790;" FontFamily="{StaticResource IconFont}" FontSize="16" Width="28" VerticalAlignment="Center" />
-                            <TextBlock Text="Görünüm" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:T nav.appearance}" FontSize="14" VerticalAlignment="Center" />
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem Tag="{x:Static local:SettingsPage.SearchSources}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE774;" FontFamily="{StaticResource IconFont}" FontSize="16" Width="28" VerticalAlignment="Center" />
-                            <TextBlock Text="Arama kaynakları" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:T nav.sources}" FontSize="14" VerticalAlignment="Center" />
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem Tag="{x:Static local:SettingsPage.Plugins}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xEA86;" FontFamily="{StaticResource IconFont}" FontSize="16" Width="28" VerticalAlignment="Center" />
-                            <TextBlock Text="Eklentiler" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:T nav.plugins}" FontSize="14" VerticalAlignment="Center" />
                         </StackPanel>
                     </ListBoxItem>
                     <ListBoxItem Tag="{x:Static local:SettingsPage.About}">
                         <StackPanel Orientation="Horizontal">
                             <TextBlock Text="&#xE946;" FontFamily="{StaticResource IconFont}" FontSize="16" Width="28" VerticalAlignment="Center" />
-                            <TextBlock Text="Hakkında" FontSize="14" VerticalAlignment="Center" />
+                            <TextBlock Text="{loc:T nav.about}" FontSize="14" VerticalAlignment="Center" />
                         </StackPanel>
                     </ListBoxItem>
                 </ListBox>
@@ -94,11 +95,11 @@
                     </TextBlock.Style>
                 </TextBlock>
                 <StackPanel Grid.Column="1" Orientation="Horizontal">
-                    <Button Content="Geri al" Style="{StaticResource PushButtonStyle}" Margin="0,0,8,0" Click="OnRevert"
-                            ToolTip="Tüm sayfalardaki kaydedilmemiş değişiklikleri at" />
-                    <Button Content="Uygula" Style="{StaticResource AccentButtonStyle}" Margin="0,0,8,0" Click="OnApply" IsDefault="True"
-                            ToolTip="Tüm sayfalardaki değişiklikleri uygula ve kaydet" />
-                    <Button Content="Kapat" Style="{StaticResource PushButtonStyle}" Click="OnClose" />
+                    <Button Content="{loc:T settings.revert}" Style="{StaticResource PushButtonStyle}" Margin="0,0,8,0" Click="OnRevert"
+                            ToolTip="{loc:T settings.revert.tip}" />
+                    <Button Content="{loc:T settings.apply}" Style="{StaticResource AccentButtonStyle}" Margin="0,0,8,0" Click="OnApply" IsDefault="True"
+                            ToolTip="{loc:T settings.apply.tip}" />
+                    <Button Content="{loc:T settings.close}" Style="{StaticResource PushButtonStyle}" Click="OnClose" />
                 </StackPanel>
             </Grid>
         </Border>

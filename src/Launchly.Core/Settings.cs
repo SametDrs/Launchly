@@ -1,3 +1,4 @@
+using Launchly.Core.Localization;
 using Microsoft.Extensions.Logging;
 
 namespace Launchly.Core;
@@ -12,8 +13,9 @@ public sealed class Settings
     /// <remarks>
     /// 2: varsayılan tema Mica'dan Acrylic'e geçti (v1 dosyasındaki "Mica" bir kez Acrylic'e çevrilir).
     /// 3: Bing, DuckDuckGo ve Wikipedia varsayılan kaynaklardan çıktı (eski varsayılanla birebir aynı kayıtlar bir kez silinir).
+    /// 4: <see cref="Language"/> gerçek bir ayar oldu (Auto/tr/en); eski dosyalardaki kullanılmayan varsayılan "tr" bir kez Auto olur.
     /// </remarks>
-    public const int CurrentVersion = 3;
+    public const int CurrentVersion = 4;
 
     /// <summary>Ayar şeması sürümü (göç için). Alanı olmayan dosya güncel sürümle okunur ve göçe girmez.</summary>
     public int Version { get; set; } = CurrentVersion;
@@ -42,8 +44,11 @@ public sealed class Settings
     /// <summary>Windows açılışında başlat.</summary>
     public bool StartOnSystemStartup { get; set; }
 
-    /// <summary>Arayüz dili.</summary>
-    public string Language { get; set; } = "tr";
+    /// <summary>
+    /// Arayüz dili: <c>Auto</c> (Windows arayüz dili Türkçeyse Türkçe, değilse İngilizce), <c>tr</c> ya da <c>en</c>.
+    /// Alan eski dosyada yoksa <c>Auto</c> olur.
+    /// </summary>
+    public string Language { get; set; } = Loc.Auto;
 
     /// <summary>
     /// Elle düzenlenmiş/bozuk JSON'dan gelen null değerleri düzeltir: null liste boş (kaynaklarda varsayılan) olur,
@@ -69,7 +74,7 @@ public sealed class Settings
             Hotkey = "Alt+Space";
         }
 
-        Language ??= "tr";
+        Language = Loc.NormalizeSetting(Language);   // null/bilinmeyen değer Auto olur
         return this;
     }
 
@@ -95,7 +100,7 @@ public sealed class Settings
             Backdrop = BackdropType.Acrylic;
             logger?.LogInformation("Ayar geçişi v{From} → v{To}: tema Mica (eski varsayılan) → Acrylic", from, CurrentVersion);
         }
-        else
+        else if (Version < 2)
         {
             logger?.LogInformation("Ayar geçişi v{From} → v{To}: tema {Backdrop} korundu", from, CurrentVersion, Backdrop);
         }
@@ -109,6 +114,13 @@ public sealed class Settings
             {
                 logger?.LogInformation("Ayar geçişi v{From} → v{To}: {Count} eski varsayılan arama kaynağı silindi", from, CurrentVersion, removed);
             }
+        }
+
+        if (Version < 4 && string.Equals(Language, Loc.Turkish, StringComparison.OrdinalIgnoreCase))
+        {
+            // v3 dosyalarındaki "tr" kullanıcı seçimi değil, hiç kullanılmayan eski varsayılandı: Windows diline göre seçilsin.
+            Language = Loc.Auto;
+            logger?.LogInformation("Ayar geçişi v{From} → v{To}: dil \"tr\" (eski varsayılan) → Auto", from, CurrentVersion);
         }
 
         Version = CurrentVersion;

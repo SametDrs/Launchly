@@ -34,7 +34,7 @@ public sealed class SettingsPolishTests
     public void Defaults_AreGoogleYouTubeGitHub()
     {
         Assert.Equal(["google", "youtube", "github"], Keywords(new Settings()));
-        Assert.Equal(3, Settings.CurrentVersion);
+        Assert.Equal(4, Settings.CurrentVersion);
     }
 
     [Theory]
@@ -45,7 +45,7 @@ public sealed class SettingsPolishTests
         var s = Load($"{{\"Version\":{version},\"SearchSources\":[{Google},{Bing},{Ddg},{Wiki}]}}");
 
         Assert.Equal(["google"], Keywords(s));
-        Assert.Equal(3, s.Version);
+        Assert.Equal(4, s.Version);
     }
 
     [Fact]
@@ -55,7 +55,7 @@ public sealed class SettingsPolishTests
 
         Assert.Equal(BackdropType.Acrylic, s.Backdrop);
         Assert.Equal(["google"], Keywords(s));
-        Assert.Equal(3, s.Version);
+        Assert.Equal(4, s.Version);
     }
 
     [Fact]
@@ -95,7 +95,7 @@ public sealed class SettingsPolishTests
 
         var second = storage.Load().Normalize();
         Assert.Equal(["google", "bing"], Keywords(second));
-        Assert.Equal(3, second.Version);
+        Assert.Equal(4, second.Version);
     }
 
     [Fact]

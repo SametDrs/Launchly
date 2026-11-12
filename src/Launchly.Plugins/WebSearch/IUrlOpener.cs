@@ -1,3 +1,4 @@
+using Launchly.Core.Localization;
 using System.Diagnostics;
 
 namespace Launchly.Plugins.WebSearch;
@@ -15,7 +16,7 @@ public sealed class ShellUrlOpener : IUrlOpener
     {
         if (!SearchUrl.IsSafe(url))
         {
-            throw new InvalidOperationException("Yalnızca http/https adresleri açılabilir.");
+            throw new InvalidOperationException(Loc.T("url.onlyHttp"));
         }
 
         Process.Start(new ProcessStartInfo(url) { UseShellExecute = true })?.Dispose();

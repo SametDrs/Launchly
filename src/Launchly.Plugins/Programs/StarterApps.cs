@@ -1,3 +1,5 @@
+using Launchly.Core.Localization;
+
 namespace Launchly.Plugins.Programs;
 
 /// <summary>
@@ -8,12 +10,12 @@ internal static class StarterApps
 {
     private static readonly Definition[] Definitions =
     [
-        new("Dosya Gezgini", "Microsoft.Windows.Explorer", ["explorer.exe"], "explorer.exe", false),
-        new("Varsayılan tarayıcı", null, [], null, true),
-        new("Ayarlar", "windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel", [], "ms-settings:", false),
-        new("Komut İstemi", "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", ["wt.exe", "cmd.exe"], "cmd.exe", false),
-        new("Not Defteri", "Microsoft.WindowsNotepad_8wekyb3d8bbwe!App", ["notepad.exe"], "notepad.exe", false),
-        new("Hesap Makinesi", "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App", ["calc.exe"], "calc.exe", false),
+        new("starter.explorer", "Microsoft.Windows.Explorer", ["explorer.exe"], "explorer.exe", false),
+        new("starter.browser", null, [], null, true),
+        new("starter.settings", "windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel", [], "ms-settings:", false),
+        new("starter.terminal", "Microsoft.WindowsTerminal_8wekyb3d8bbwe!App", ["wt.exe", "cmd.exe"], "cmd.exe", false),
+        new("starter.notepad", "Microsoft.WindowsNotepad_8wekyb3d8bbwe!App", ["notepad.exe"], "notepad.exe", false),
+        new("starter.calculator", "Microsoft.WindowsCalculator_8wekyb3d8bbwe!App", ["calc.exe"], "calc.exe", false),
     ];
 
     /// <summary>Tanım sayısı (tarayıcı bulunamazsa sonuç bir eksik olur).</summary>
@@ -76,7 +78,7 @@ internal static class StarterApps
 
         return def.FallbackCommand is null
             ? null
-            : new ProgramEntry { Name = def.Name, Kind = ProgramKind.Command, ShortcutPath = def.FallbackCommand };
+            : new ProgramEntry { Name = Loc.T(def.NameKey), Kind = ProgramKind.Command, ShortcutPath = def.FallbackCommand };
     }
 
     private static string? SafeFileName(Func<string?>? resolver)
@@ -93,5 +95,5 @@ internal static class StarterApps
         }
     }
 
-    private sealed record Definition(string Name, string? Aumid, string[] TargetFiles, string? FallbackCommand, bool IsBrowser);
+    private sealed record Definition(string NameKey, string? Aumid, string[] TargetFiles, string? FallbackCommand, bool IsBrowser);
 }

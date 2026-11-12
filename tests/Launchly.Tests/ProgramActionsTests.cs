@@ -474,4 +474,62 @@ public sealed class ProgramActionsTests : IDisposable
         Assert.Equal("A", doc.RootElement.GetProperty("Hidden")[0].GetProperty("Name").GetString());
         Assert.Equal("lnk:b", doc.RootElement.GetProperty("Pinned")[0].GetString());
     }
+
+    // ---------------------------------------------------------------- Dil
+
+    [Theory]
+    [InlineData("tr", "Yönetici olarak çalıştır", "Dosya konumunu aç", "Yolu kopyala", "Gizle", "Sabitle", "Uygulama")]
+    [InlineData("en", "Run as administrator", "Open file location", "Copy path", "Hide", "Pin", "Application")]
+    public async Task ActionTitlesAndTypeLabel_FollowLanguage_WithoutRestart(string language, string admin, string reveal, string copy, string hide, string pin, string type)
+    {
+        var plugin = await ReadyAsync(["Alpha"], Store(), new FakeProgramLauncher(), new RecordingClipboard());
+        var other = language == "tr" ? "en" : "tr";
+
+        using (TestLanguage.Use(other))
+        {
+            Assert.NotEqual(type, (await Single(plugin, "alpha", "Alpha")).TypeLabel);   // aynı eklenti örneği, önceki dil
+        }
+
+        using var _ = TestLanguage.Use(language);
+        var r = await Single(plugin, "alpha", "Alpha");
+
+        Assert.Equal([admin, reveal, copy, hide, pin], r.ContextActions.Select(a => a.Title));
+        Assert.Equal(type, r.TypeLabel);
+        Assert.Equal(ResultAction.RunAsAdminId, r.ContextActions[0].Id);   // kimlik dile bağlı değil
+    }
+
+    [Fact]
+    public async Task PinnedAction_TitleFollowsLanguage()
+    {
+        var store = Store();
+        var plugin = await ReadyAsync(["Beta"], store, new FakeProgramLauncher());
+        Assert.False(await Action(await Single(plugin, "beta", "Beta"), "Sabitle").Execute());
+
+        using var _ = TestLanguage.Use("en");
+
+        Assert.Equal("Unpin", (await Single(plugin, "beta", "Beta")).ContextActions[^1].Title);
+    }
+
+    [Theory]
+    [InlineData("tr", new[] { "Dosya Gezgini", "Ayarlar", "Komut İstemi", "Not Defteri", "Hesap Makinesi" })]
+    [InlineData("en", new[] { "File Explorer", "Settings", "Command Prompt", "Notepad", "Calculator" })]
+    public void StarterFallbackNames_FollowLanguage(string language, string[] expected)
+    {
+        using var _ = TestLanguage.Use(language);
+
+        // Sistemde hiçbir uygulama bulunamazsa yedek adlar kullanılır; sistemden gelen adlara dokunulmaz (aşağıdaki test).
+        Assert.Equal(expected, StarterApps.Resolve([], () => null).Select(e => e.Name));
+    }
+
+    [Fact]
+    public void StarterApps_SystemProvidedNames_AreNotTranslated()
+    {
+        using var _ = TestLanguage.Use("en");
+        var entry = new ProgramEntry { Name = "Dosya Gezgini", Kind = ProgramKind.AppsFolder, AppUserModelId = "Microsoft.Windows.Explorer" };
+
+        var list = StarterApps.Resolve([entry], () => null);
+
+        Assert.Equal("Dosya Gezgini", list[0].Name);   // sistemin (yerelleştirilmiş) adı olduğu gibi kalır
+        Assert.Equal("Settings", list[1].Name);         // yedek ad ise dile göre
+    }
 }

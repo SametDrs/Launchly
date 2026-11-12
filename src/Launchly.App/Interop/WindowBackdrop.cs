@@ -4,6 +4,7 @@ using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Shell;
 using Launchly.Core;
+using Launchly.Core.Localization;
 using Microsoft.Win32;
 
 namespace Launchly.App.Interop;
@@ -19,8 +20,8 @@ namespace Launchly.App.Interop;
 /// </remarks>
 public static class WindowBackdrop
 {
-    public const string UnsupportedReason = "Windows 11 22H2 ve sonrası gerekir";
-    public const string TransparencyOffReason = "Windows saydamlık efektleri kapalı";
+    public static string UnsupportedReason => Loc.T("backdrop.unsupported");
+    public static string TransparencyOffReason => Loc.T("backdrop.transparencyOff");
 
     private const int DwmwaUseImmersiveDarkMode = 20;
     private const int DwmwaWindowCornerPreference = 33;

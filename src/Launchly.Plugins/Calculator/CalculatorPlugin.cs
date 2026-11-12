@@ -1,3 +1,4 @@
+using Launchly.Core.Localization;
 using Launchly.Plugin;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -36,7 +37,7 @@ public sealed class CalculatorPlugin : IPlugin
         _logger = logger ?? NullLogger.Instance;
     }
 
-    public PluginMetadata Metadata { get; } = new() { Id = PluginId, Name = "Calculator", Description = "Yazdığın matematik ifadesini hesaplar; sonucu Enter ile kopyalar." };
+    public PluginMetadata Metadata => new() { Id = PluginId, Name = Loc.T("plugin.calculator.name"), Description = Loc.T("plugin.calculator.desc") };
 
     public Task InitAsync(PluginContext context) => Task.CompletedTask;
 
@@ -52,10 +53,10 @@ public sealed class CalculatorPlugin : IPlugin
         var result = new Result
         {
             Title = formatted,
-            SubTitle = $"{text} = {formatted}  (Enter: panoya kopyala)",
+            SubTitle = Loc.T("calculator.subtitle", text, formatted),
             Icon = "", // Calculator
             Score = 900,
-            TypeLabel = "Calculator",
+            TypeLabel = Loc.T("type.calculator"),
             AutoComplete = formatted,
             Action = () => Task.FromResult(Copy(formatted)),
         };

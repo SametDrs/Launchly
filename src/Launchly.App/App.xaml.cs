@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.IO;
 using System.Windows;
 using System.Windows.Interop;
@@ -8,6 +9,7 @@ using Launchly.App.SettingsUi;
 using Launchly.App.Tray;
 using Launchly.App.ViewModels;
 using Launchly.Core;
+using Launchly.Core.Localization;
 using Launchly.Core.Plugins;
 using Launchly.Core.Storage;
 using Launchly.Plugin;
@@ -72,6 +74,17 @@ public partial class App : Application
         // Ayarlar ilk çözümlemede yüklenir; dosya yoksa oluşturulur.
         var settings = Services.GetRequiredService<Settings>();
         Log.Information("Launchly başladı. Ayar dosyası: {Path}, kısayol: {Hotkey}", DataLocation.SettingsPath, settings.Hotkey);
+
+        // Dil: kurulumun yazdığı işaret yalnızca dil ayarı Auto iken uygulanır (bir kez, ardından silinir); sonra ayardan çözülür.
+        if (InstallerLanguage.Consume(settings, InstallerLanguage.MarkerPath, Services.GetRequiredService<ILogger<Settings>>()))
+        {
+            Services.GetRequiredService<JsonStorage<Settings>>().Save(settings);
+        }
+
+        Loc.SetLanguage(settings.Language);
+        ApplyUiCulture();
+        Loc.LanguageChanged += ApplyUiCulture;
+        Log.Information("Arayüz dili: {Language} (ayar: {Setting})", Loc.Language, settings.Language);
 
         // Eklentiler pencere açılmadan başlatılır (şimdilik kayıtlı eklenti yok; 04-06 ekler).
         await Services.GetRequiredService<PluginManager>().InitializeAsync();
@@ -194,6 +207,13 @@ public partial class App : Application
         services.AddSingleton<PluginManager>();
         services.AddSingleton<MainViewModel>();
         services.AddSingleton<MainWindow>();
+    }
+
+    // Çerçeve kaynakları (ör. metin kutusu bağlam menüsü) da seçilen dilde gelsin; "Auto" çözümlemesi bundan etkilenmez.
+    private static void ApplyUiCulture()
+    {
+        CultureInfo.DefaultThreadCurrentUICulture = Loc.Culture;
+        CultureInfo.CurrentUICulture = Loc.Culture;
     }
 
     private void OnDispatcherUnhandledException(object sender, DispatcherUnhandledExceptionEventArgs e)

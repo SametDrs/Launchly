@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using System.Windows.Interop;
 using Launchly.Core;
+using Launchly.Core.Localization;
 
 namespace Launchly.App.Hotkey;
 
@@ -34,7 +35,7 @@ public sealed class HotkeyManager : IDisposable
 
         if (!HotkeyParser.TryParse(hotkeyText, out var def))
         {
-            error = $"\"{hotkeyText}\" geçerli bir kısayol değil (örnek: Alt+Space).";
+            error = Loc.T("hotkey.invalid", hotkeyText);
             return false;
         }
 
@@ -42,8 +43,8 @@ public sealed class HotkeyManager : IDisposable
         {
             var code = Marshal.GetLastWin32Error();
             error = code == ErrorHotkeyAlreadyRegistered
-                ? $"\"{hotkeyText}\" kısayolu başka bir uygulama tarafından kullanılıyor. Launchly bu kısayolla açılamayacak; ayarlardan farklı bir kısayol seçin."
-                : $"\"{hotkeyText}\" kısayolu kaydedilemedi (Win32 hata {code}).";
+                ? Loc.T("hotkey.inUse", hotkeyText)
+                : Loc.T("hotkey.failed", hotkeyText, code);
             return false;
         }
 

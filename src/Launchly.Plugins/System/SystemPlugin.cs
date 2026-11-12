@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.InteropServices;
+using Launchly.Core.Localization;
 using Launchly.Core.Querying;
 using Launchly.Plugin;
 using Microsoft.Extensions.Logging;
@@ -90,15 +91,25 @@ public sealed class SystemPlugin : IPlugin
 {
     public const string PluginId = "launchly.system";
 
-    private sealed record Command(string Title, string SubTitle, string Icon, string? ConfirmMessage, Action<ISystemCommands> Run);
+    // Key: Strings anahtar kökü (system.<Key>.title/.sub/.confirm). Başlık hem o anki dilde hem İngilizce eşleşir ("lock" her dilde çalışır).
+    private sealed record Command(string Key, string Icon, bool NeedsConfirmation, Action<ISystemCommands> Run)
+    {
+        public string Title => Loc.T("system." + Key + ".title");
+
+        public string SubTitle => Loc.T("system." + Key + ".sub");
+
+        public string EnglishTitle => Loc.In(Loc.English, "system." + Key + ".title");
+
+        public string? ConfirmMessage => NeedsConfirmation ? Loc.T("system." + Key + ".confirm") : null;
+    }
 
     private static readonly Command[] Commands =
     [
-        new("Lock", "Lock the computer", "", null, c => c.Lock()),
-        new("Sleep", "Put the computer to sleep", "", null, c => c.Sleep()),
-        new("Shutdown", "Shut down the computer", "", "Bilgisayar kapatılsın mı?", c => c.Shutdown()),
-        new("Restart", "Restart the computer", "", "Bilgisayar yeniden başlatılsın mı?", c => c.Restart()),
-        new("Empty Recycle Bin", "Permanently delete items in the Recycle Bin", "", "Geri dönüşüm kutusu kalıcı olarak boşaltılsın mı?", c => c.EmptyRecycleBin()),
+        new("lock", "", false, c => c.Lock()),
+        new("sleep", "", false, c => c.Sleep()),
+        new("shutdown", "", true, c => c.Shutdown()),
+        new("restart", "", true, c => c.Restart()),
+        new("recycle", "", true, c => c.EmptyRecycleBin()),
     ];
 
     private readonly ISystemCommands _system;
@@ -117,7 +128,7 @@ public sealed class SystemPlugin : IPlugin
         _logger = logger ?? NullLogger.Instance;
     }
 
-    public PluginMetadata Metadata { get; } = new() { Id = PluginId, Name = "System", Description = "Kilitle, uyku, kapat, yeniden başlat ve geri dönüşüm kutusunu boşalt gibi sistem komutlarını çalıştırır." };
+    public PluginMetadata Metadata => new() { Id = PluginId, Name = Loc.T("plugin.system.name"), Description = Loc.T("plugin.system.desc") };
 
     public Task InitAsync(PluginContext context) => Task.CompletedTask;
 
@@ -133,6 +144,12 @@ public sealed class SystemPlugin : IPlugin
         foreach (var command in Commands)
         {
             var match = StringMatcher.Match(search, command.Title);
+            var english = StringMatcher.Match(search, command.EnglishTitle);   // "lock" Türkçe arayüzde de çalışır
+            if (english.IsMatch && (!match.IsMatch || english.Score > match.Score))
+            {
+                match = english;
+            }
+
             if (!match.IsMatch)
             {
                 continue;
@@ -145,8 +162,8 @@ public sealed class SystemPlugin : IPlugin
                 SubTitle = c.SubTitle,
                 Icon = c.Icon,
                 Score = match.Score,
-                TypeLabel = "System",
-                AutoComplete = c.Title.ToLowerInvariant(),
+                TypeLabel = Loc.T("type.system"),
+                AutoComplete = c.Title.ToLower(Loc.Culture),
                 Action = () => Task.FromResult(Run(c)),
             });
         }

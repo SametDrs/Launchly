@@ -11,7 +11,11 @@
     <Version>1.0.0</Version>
     <!-- Logo: tools\make-ico.ps1 ile assets\logo-source.jpg'den üretilir. -->
     <ApplicationIcon>Assets\Launchly.ico</ApplicationIcon>
-    <!-- Kurulum boyutu: yalnızca Türkçe çerçeve kaynakları (İngilizce yerleşik). -->
+    <!--
+      Kurulum boyutu: çerçeve (WPF/WinForms) kaynaklarından yalnızca Türkçe uydu kalır, İngilizce zaten yerleşiktir; yani iki arayüz
+      dili de çalışır. Launchly'nin KENDİ metinleri uydu derlemesinde değil, Launchly.Core.dll içinde (Localization/Strings.cs) olduğundan
+      yeni bir dil eklenmedikçe bu değer değişmez. Dil değişince App, çerçeve kaynakları için CurrentUICulture'ı da ayarlar.
+    -->
     <SatelliteResourceLanguages>tr</SatelliteResourceLanguages>
   </PropertyGroup>
 

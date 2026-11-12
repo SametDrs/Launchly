@@ -1,14 +1,15 @@
 <UserControl x:Class="Launchly.App.SettingsUi.Pages.SearchSourcesPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:loc="clr-namespace:Launchly.App.Localization">
     <ScrollViewer VerticalScrollBarVisibility="Auto" Focusable="False">
         <StackPanel Margin="28,22,28,20">
             <Grid>
-                <TextBlock Text="Arama kaynakları" Style="{StaticResource PageTitleStyle}" />
-                <Button Content="+ Ekle" HorizontalAlignment="Right" VerticalAlignment="Top"
+                <TextBlock Text="{loc:T sources.title}" Style="{StaticResource PageTitleStyle}" />
+                <Button Content="{loc:T sources.add}" HorizontalAlignment="Right" VerticalAlignment="Top"
                         Style="{StaticResource PushButtonStyle}" Click="OnAddSource" />
             </Grid>
-            <TextBlock Text="Adreste {q} varsa arama yapar, yoksa siteyi açar." Style="{StaticResource HintTextStyle}" Margin="0,0,0,12" />
+            <TextBlock Text="{loc:T sources.hint}" Style="{StaticResource HintTextStyle}" Margin="0,0,0,12" />
 
             <!-- Sütun başlıkları -->
             <Grid Margin="0,0,0,6">
@@ -19,10 +20,10 @@
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="42" />
                 </Grid.ColumnDefinitions>
-                <TextBlock Grid.Column="0" Text="Etkin" Style="{StaticResource HintTextStyle}" />
-                <TextBlock Grid.Column="1" Text="Başlık" Style="{StaticResource HintTextStyle}" />
-                <TextBlock Grid.Column="2" Text="Anahtar kelime" Style="{StaticResource HintTextStyle}" />
-                <TextBlock Grid.Column="3" Text="Adres şablonu" Style="{StaticResource HintTextStyle}" />
+                <TextBlock Grid.Column="0" Text="{loc:T sources.col.enabled}" Style="{StaticResource HintTextStyle}" />
+                <TextBlock Grid.Column="1" Text="{loc:T sources.col.title}" Style="{StaticResource HintTextStyle}" />
+                <TextBlock Grid.Column="2" Text="{loc:T sources.col.keyword}" Style="{StaticResource HintTextStyle}" />
+                <TextBlock Grid.Column="3" Text="{loc:T sources.col.url}" Style="{StaticResource HintTextStyle}" />
             </Grid>
 
             <ItemsControl ItemsSource="{Binding Sources}">
@@ -37,15 +38,15 @@
                                 <ColumnDefinition Width="42" />
                             </Grid.ColumnDefinitions>
                             <CheckBox Grid.Column="0" IsChecked="{Binding Enabled}" Style="{StaticResource DarkCheckBoxStyle}"
-                                      ToolTip="Etkin" VerticalAlignment="Center" />
+                                      ToolTip="{loc:T sources.col.enabled}" VerticalAlignment="Center" />
                             <TextBox Grid.Column="1" Text="{Binding Title, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,6,0" ToolTip="Başlık" />
+                                     Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,6,0" ToolTip="{loc:T sources.col.title}" />
                             <TextBox Grid.Column="2" Text="{Binding ActionKeyword, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,6,0" ToolTip="Anahtar kelime" />
+                                     Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,6,0" ToolTip="{loc:T sources.col.keyword}" />
                             <TextBox Grid.Column="3" Text="{Binding UrlTemplate, UpdateSourceTrigger=PropertyChanged}"
-                                     Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,6,0" ToolTip="Adres şablonu" />
+                                     Style="{StaticResource FieldTextBoxStyle}" Margin="0,0,6,0" ToolTip="{loc:T sources.col.url}" />
                             <Button Grid.Column="4" Content="&#xE74D;" FontFamily="{StaticResource IconFont}"
-                                    Style="{StaticResource PushButtonStyle}" Padding="10,6" ToolTip="Sil"
+                                    Style="{StaticResource PushButtonStyle}" Padding="10,6" ToolTip="{loc:T sources.delete}"
                                     Tag="{Binding}" Click="OnRemoveSource" />
                         </Grid>
                     </DataTemplate>
